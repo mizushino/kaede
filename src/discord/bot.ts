@@ -1,0 +1,100 @@
+import { Client, GatewayIntentBits, Message } from 'discord.js';
+import path from 'path';
+import { Bot } from '../core/bot.js';
+import { Messenger } from '../core/messenger.js';
+import { DiscordMessenger } from './messenger.js';
+
+export class DiscordBot extends Bot {
+  readonly discord: Client;
+
+  constructor() {
+    super();
+    this.discord = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions,
+      ],
+    });
+
+    this.setupEventHandlers();
+  }
+
+  protected createMessenger(channelId: string): Messenger {
+    return new DiscordMessenger(this.discord, channelId);
+  }
+
+  private setupEventHandlers(): void {
+    this.discord.once('clientReady', () => {
+      console.log(`[BOT] Ready as ${this.discord.user?.tag}`);
+      this.discord.user?.setPresence({ status: 'idle', activities: [] });
+    });
+
+    this.discord.on('messageCreate', async (message: Message) => {
+      if (message.author.id === this.discord.user?.id) return;
+      if (!message.content && message.attachments.size === 0) return;
+      if (this.isDuplicate(message.id)) return;
+
+      console.log(`[BOT] Message from ${message.author.username}: ${message.content || '[Attachments]'}`);
+
+      // Reset command
+      if (message.content === '!reset' || message.content === '!clear') {
+        const agent = this.resetAgent(message.channel.id);
+        if (agent) {
+          await message.reply(`🔄 Reset ${agent.model} session`);
+        }
+        return;
+      }
+
+      // Download attachments
+      const imageAttachments: string[] = [];
+      const fileAttachments: string[] = [];
+      for (const [, attachment] of message.attachments) {
+        const fileName = `${Date.now()}_${attachment.name}`;
+        const filePath = path.join(this.temporaryDir, fileName);
+        try {
+          await this.downloadAttachment(attachment.url, filePath);
+          if (attachment.contentType?.startsWith('image/')) {
+            imageAttachments.push(filePath);
+          } else {
+            fileAttachments.push(filePath);
+          }
+          console.log(`[BOT] Downloaded: ${fileName}`);
+        } catch (err) {
+          console.error(`[BOT] Failed to download attachment:`, err);
+        }
+      }
+
+      const agent = this.getOrCreateAgent(message.channel.id);
+      const incoming = {
+        id: message.id,
+        author: message.author.username,
+        content: message.content,
+      };
+      await agent.processMessage(incoming, imageAttachments, fileAttachments);
+    });
+  }
+
+  async start(): Promise<void> {
+    const token = process.env.DISCORD_BOT_TOKEN;
+    if (!token) {
+      console.error('[BOT] No token found in environment');
+      process.exit(1);
+    }
+
+    try {
+      await this.clientManager.warmup();
+      await this.discord.login(token);
+      console.log('[BOT] Connected to Discord');
+    } catch (error) {
+      console.error('[BOT] Failed to connect:', error);
+      process.exit(1);
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    await super.shutdown();
+    this.discord.destroy();
+  }
+}

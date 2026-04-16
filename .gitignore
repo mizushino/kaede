@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.claude
+!.env.gpt
+*.log
+.DS_Store
+coverage/
+.vscode/
+.idea/
+tmp/
+workspace/
