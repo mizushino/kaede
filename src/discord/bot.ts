@@ -61,10 +61,9 @@ export class DiscordBot extends Bot {
             const client = await this.clientManager.getClient();
             const models = await client.listModels();
             const lines = models.map(m => {
-              const ctx = m.capabilities.limits.max_context_window_tokens?.toLocaleString() ?? '?';
-              const prompt = m.capabilities.limits.max_prompt_tokens?.toLocaleString();
+              const multiplier = m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?';
               const reasoning = m.supportedReasoningEfforts?.join('/') ?? '-';
-              return `\`${m.id}\` — ctx: ${ctx}${prompt ? ` / prompt: ${prompt}` : ''} / reasoning: ${reasoning}`;
+              return `\`${m.id}\` — cost: ${multiplier} / reasoning: ${reasoning}`;
             });
             await message.reply(`**Available models (${models.length}):**\n${lines.join('\n')}`);
           } catch (err) {
