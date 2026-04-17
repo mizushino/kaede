@@ -3,7 +3,7 @@ import { z, type ZodType } from 'zod';
 import { readdir, readFile, writeFile, unlink } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import path from 'path';
-import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
 import { logger } from './logger.js';
 
 /** Plain tool definition exported by plugin files (no SDK dependency needed). */
@@ -25,9 +25,7 @@ export class PluginLoader {
   /** Import a plugin file and return its raw tools. Always loads fresh (no cache). */
   private async importPlugin(file: string, ctx: unknown): Promise<RawTool[]> {
     const filePath = path.join(this.pluginsDir, file);
-    // Clear the CJS require cache so edits to plugin files take effect immediately.
-    const _require = createRequire(__filename);
-    try { delete _require.cache[_require.resolve(filePath)]; } catch { /* ignore */ }
+    // Use dynamic import with cache busting for fresh loads
     const mod = await import(`${filePath}?t=${Date.now()}`);
     if (typeof mod.createTools !== 'function') return [];
     const tools = mod.createTools(ctx);
