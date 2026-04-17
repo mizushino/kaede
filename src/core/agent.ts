@@ -136,7 +136,9 @@ After responding, call wait_messages to wait for new messages.`,
       if (icon) {
         const status = truncate(`${icon} ${toolName}${detail}`, 88);
         console.log(`[${this.model}] tool: ${toolName}${detail}`);
-        this.messenger.setStatus(status);
+        if (toolName !== 'send_message') {
+          this.messenger.setStatus(status);
+        }
       }
     });
 

@@ -1,7 +1,7 @@
 export const STATUS_ICON: Record<string, string> = {
   // Custom tools
-  send_message:   '',
-  get_messages:   '📨',
+  send_message:   '📨',
+  get_messages:   '👀',
   get_channels:   '📁',
   get_servers:    '🏠',
   check_message:  '👀',
