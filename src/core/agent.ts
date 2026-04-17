@@ -76,7 +76,10 @@ The current channel ID is: ${channelId}
 You have a self-modifiable skill system (skills dir: ${this.skillLoader.skillsDir}).
 Tools: list_skills, read_skill, write_skill, delete_skill, run_skill
 
-After responding, call wait_messages to wait for new messages.`,
+IMPORTANT RULES:
+- ALWAYS use the send_message tool to send responses. Never output text directly without calling send_message.
+- ALWAYS call wait_messages after every response, even if you have nothing to say. This keeps you online and ready for the next message.
+- Do not end the session without calling wait_messages.`,
       },
     };
   }
