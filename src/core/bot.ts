@@ -4,6 +4,7 @@ import type { Messenger } from './messenger.js';
 import fs from 'fs';
 import path from 'path';
 import { writeFile } from 'fs/promises';
+import { logger } from './logger.js';
 
 export abstract class Bot {
   protected readonly workspaceDir: string;
@@ -44,7 +45,7 @@ export abstract class Bot {
   protected getOrCreateAgent(channelId: string): Agent {
     let agent = this.sessions.get(channelId);
     if (!agent) {
-      console.log(`[BOT] Creating agent (model: ${this.model}) for channel ${channelId}`);
+      logger.log(`[BOT] Creating agent (model: ${this.model}) for channel ${channelId}`);
       const messenger = this.createMessenger(channelId);
       agent = new Agent(messenger, this.workspaceDir, this.skillsDir, this.model, this.clientManager);
       this.sessions.set(channelId, agent);
@@ -65,12 +66,12 @@ export abstract class Bot {
   abstract start(): Promise<void>;
 
   async shutdown(): Promise<void> {
-    console.log('[BOT] Shutting down...');
+    logger.log('[BOT] Shutting down...');
     for (const agent of this.sessions.values()) {
       agent.dispose();
     }
     this.sessions.clear();
     await this.clientManager.shutdown();
-    console.log('[BOT] Disconnected');
+    logger.log('[BOT] Disconnected');
   }
 }

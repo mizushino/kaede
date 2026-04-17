@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { logger } from './logger.js';
 
 export interface PromptFile {
   name: string;
@@ -30,7 +31,7 @@ export class PromptLoader {
     this.prompts.clear();
 
     if (!fs.existsSync(this.promptsDir)) {
-      console.log(`[PROMPTS] Directory not found: ${this.promptsDir}`);
+      logger.log(`[PROMPTS] Directory not found: ${this.promptsDir}`);
       return this.prompts;
     }
 
@@ -43,15 +44,15 @@ export class PromptLoader {
         try {
           const prompt = await this.parsePromptFile(filePath);
           this.prompts.set(prompt.name, prompt);
-          console.log(`[PROMPTS] Loaded: ${prompt.name} (${file})`);
+          logger.log(`[PROMPTS] Loaded: ${prompt.name} (${file})`);
         } catch (err) {
-          console.error(`[PROMPTS] Failed to parse ${file}:`, err);
+          logger.error(`[PROMPTS] Failed to parse ${file}:`, err);
         }
       }
 
-      console.log(`[PROMPTS] Loaded ${this.prompts.size} prompt(s)`);
+      logger.log(`[PROMPTS] Loaded ${this.prompts.size} prompt(s)`);
     } catch (err) {
-      console.error('[PROMPTS] Failed to load prompts:', err);
+      logger.error('[PROMPTS] Failed to load prompts:', err);
     }
 
     return this.prompts;

@@ -12,6 +12,7 @@ import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
 import { PromptLoader } from '../core/prompts.js';
+import { logger } from '../core/logger.js';
 
 export class DiscordBot extends Bot {
   readonly discord: Client;
@@ -88,18 +89,18 @@ export class DiscordBot extends Bot {
       );
 
       commands.push(builder);
-      console.log(`[BOT] Registered prompt command: /${prompt.name}`);
+      logger.log(`[BOT] Registered prompt command: /${prompt.name}`);
     }
 
     const rest = new REST().setToken(token);
     try {
       const commandsJSON = commands.map(cmd => cmd.toJSON());
-      console.log(`[BOT] Registering ${commands.length} slash commands (${prompts.length} prompts)...`);
+      logger.log(`[BOT] Registering ${commands.length} slash commands (${prompts.length} prompts)...`);
       await rest.put(Routes.applicationCommands(this.discord.user.id), { body: commandsJSON });
-      console.log(`[BOT] Successfully registered ${commands.length} slash commands`);
+      logger.log(`[BOT] Successfully registered ${commands.length} slash commands`);
     } catch (err) {
-      console.error('[BOT] Failed to register slash commands:');
-      console.error(err);
+      logger.error('[BOT] Failed to register slash commands:');
+      logger.error(err);
     }
   }
 
@@ -176,7 +177,7 @@ export class DiscordBot extends Bot {
 
   private setupEventHandlers(): void {
     this.discord.once('clientReady', async () => {
-      console.log(`[BOT] Ready as ${this.discord.user?.tag}`);
+      logger.log(`[BOT] Ready as ${this.discord.user?.tag}`);
       this.discord.user?.setPresence({ status: 'idle', activities: [] });
       await this.registerSlashCommands();
     });
@@ -191,7 +192,7 @@ export class DiscordBot extends Bot {
       if (!message.content && message.attachments.size === 0) return;
       if (this.isDuplicate(message.id)) return;
 
-      console.log(`[BOT] Message from ${message.author.username}: ${message.content || '[Attachments]'}`);
+      logger.log(`[BOT] Message from ${message.author.username}: ${message.content || '[Attachments]'}`);
 
       // Download attachments
       const imageAttachments: string[] = [];
@@ -206,9 +207,9 @@ export class DiscordBot extends Bot {
           } else {
             fileAttachments.push(filePath);
           }
-          console.log(`[BOT] Downloaded: ${fileName}`);
+          logger.log(`[BOT] Downloaded: ${fileName}`);
         } catch (err) {
-          console.error(`[BOT] Failed to download attachment:`, err);
+          logger.error(`[BOT] Failed to download attachment:`, err);
         }
       }
 
@@ -225,16 +226,16 @@ export class DiscordBot extends Bot {
   async start(): Promise<void> {
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token) {
-      console.error('[BOT] No token found in environment');
+      logger.error('[BOT] No token found in environment');
       process.exit(1);
     }
 
     try {
       await this.clientManager.warmup();
       await this.discord.login(token);
-      console.log('[BOT] Connected to Discord');
+      logger.log('[BOT] Connected to Discord');
     } catch (error) {
-      console.error('[BOT] Failed to connect:', error);
+      logger.error('[BOT] Failed to connect:', error);
       process.exit(1);
     }
   }

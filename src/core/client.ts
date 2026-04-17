@@ -1,4 +1,5 @@
 import { CopilotClient } from '@github/copilot-sdk';
+import { logger } from './logger.js';
 
 export class CopilotClientManager {
   private client: CopilotClient | null = null;
@@ -21,7 +22,7 @@ export class CopilotClientManager {
         const client = new CopilotClient(opts);
         await client.start();
         this.client = client;
-        console.log('[CopilotClient] Started');
+        logger.log('[CopilotClient] Started');
         return client;
       })();
     }
@@ -37,11 +38,11 @@ export class CopilotClientManager {
   }
 
   async warmup(): Promise<void> {
-    console.log('[CopilotClient] Warming up...');
+    logger.log('[CopilotClient] Warming up...');
     try {
       await this.getClient();
     } catch (err) {
-      console.log('[CopilotClient] Warmup failed (will retry on first message):', (err as Error).message);
+      logger.log('[CopilotClient] Warmup failed (will retry on first message):', (err as Error).message);
       this.invalidate();
     }
   }
@@ -57,7 +58,7 @@ export class CopilotClientManager {
           new Promise(r => setTimeout(r, 3_000)),
         ]);
       } catch (err) {
-        console.error('[CopilotClient] Stop error:', err);
+        logger.error('[CopilotClient] Stop error:', err);
       }
     }
   }

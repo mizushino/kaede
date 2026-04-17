@@ -1,18 +1,19 @@
 import { DiscordBot } from './discord/bot.js';
+import { logger } from './core/logger.js';
 
 const bot = new DiscordBot();
-bot.start().catch(console.error);
+bot.start().catch(logger.error);
 
 // Graceful shutdown
 let shuttingDown = false;
 const onShutdown = async (signal?: string) => {
   if (shuttingDown) return;
   shuttingDown = true;
-  if (signal) console.log(`[BOT] Received ${signal}`);
+  if (signal) logger.log(`[BOT] Received ${signal}`);
 
   // Force exit if graceful shutdown hangs
   const forceTimer = setTimeout(() => {
-    console.error('[BOT] Forced exit after timeout');
+    logger.error('[BOT] Forced exit after timeout');
     process.kill(process.pid, 'SIGKILL');
   }, 8_000);
   forceTimer.unref();
@@ -24,10 +25,10 @@ const onShutdown = async (signal?: string) => {
 process.on('SIGTERM', () => onShutdown('SIGTERM'));
 process.on('SIGINT', () => onShutdown('SIGINT'));
 process.on('uncaughtException', (err) => {
-  console.error('[BOT] Uncaught exception:', err);
+  logger.error('[BOT] Uncaught exception:', err);
   onShutdown('uncaughtException');
 });
 process.on('unhandledRejection', (err) => {
-  console.error('[BOT] Unhandled rejection:', err);
+  logger.error('[BOT] Unhandled rejection:', err);
   onShutdown('unhandledRejection');
 });

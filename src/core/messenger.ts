@@ -1,3 +1,4 @@
+import { logger } from './logger.js';
 export interface MessageInfo {
   id: string;
   author: string;
@@ -67,7 +68,7 @@ export abstract class Messenger {
         }
       }, TYPING_INTERVAL);
     } catch (err) {
-      console.error('[Messenger] Failed to start typing:', err);
+      logger.error('[Messenger] Failed to start typing:', err);
     }
   }
 

@@ -9,6 +9,7 @@ import { Inbox, QueuedMessage, IncomingMessage } from './inbox.js';
 import type { Messenger } from './messenger.js';
 import { loadPermissionConfig, createPermissionHandler, type PermissionConfig } from './permissions.js';
 import { STATUS_ICON } from './status.js';
+import { logger } from './logger.js';
 
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 3_600_000; // 1 hour
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
@@ -99,7 +100,7 @@ IMPORTANT RULES:
       const session = await client.resumeSession(sessionId, config);
       this.setupEventHandlers(session);
       this.currentSession = session;
-      console.log(`[${this.model}] Resumed existing session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
+      logger.log(`[${this.model}] Resumed existing session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
       return session;
     } catch {
       // No existing session — create fresh
@@ -109,7 +110,7 @@ IMPORTANT RULES:
     const session = await client.createSession({ sessionId, ...config });
     this.setupEventHandlers(session);
     this.currentSession = session;
-    console.log(`[${this.model}] Created session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
+    logger.log(`[${this.model}] Created session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
     return session;
   }
 
@@ -125,7 +126,7 @@ IMPORTANT RULES:
     this.setupEventHandlers(session);
     this.currentSession = session;
     this.resumeOnNextMessage = false;
-    console.log(`[${this.model}] Resumed session ${sessionId} with new model`);
+    logger.log(`[${this.model}] Resumed session ${sessionId} with new model`);
     return session;
   }
 
@@ -136,7 +137,7 @@ IMPORTANT RULES:
       const args = event?.data?.parameters || event?.data?.arguments || event?.data?.args || {};
       const detail = this.formatToolDetail(toolName, args);
       const icon = STATUS_ICON[toolName] ?? '🤔';
-      console.log(`[${this.model}] tool: ${toolName}${detail}`);
+      logger.log(`[${this.model}] tool: ${toolName}${detail}`);
       if (icon && toolName !== 'send_message') {
         const status = truncate(`${icon} ${toolName}${detail}`, 88);
         this.messenger.setStatus(status);
@@ -171,7 +172,7 @@ IMPORTANT RULES:
 
   async processMessage(message: IncomingMessage, attachments: string[], files: string[] = []): Promise<void> {
     this.queue.push({ message, attachments, files });
-    console.log(`[${this.model}] Queued message (${this.queue.length} pending) [ch:${this.messenger.channelId}]`);
+    logger.log(`[${this.model}] Queued message (${this.queue.length} pending) [ch:${this.messenger.channelId}]`);
 
     // If already processing, the AI will pick up queued messages via wait_messages tool
     if (this.processingPromise) return;
@@ -189,11 +190,11 @@ IMPORTANT RULES:
         await this.messenger.startTyping();
         this.messenger.setStatus('👀 check_message');
 
-        console.log(`[${this.model}] Processing ${items.length} message(s)`);
+        logger.log(`[${this.model}] Processing ${items.length} message(s)`);
         await this.sendMessages(items);
       }
     } catch (err) {
-      console.error(`[${this.model}] Processing error:`, err);
+      logger.error(`[${this.model}] Processing error:`, err);
     } finally {
       this.processingPromise = null;
       this.messenger.stopTyping();
@@ -215,7 +216,7 @@ IMPORTANT RULES:
           .flatMap(item => item.attachments)
           .map(filePath => ({ type: 'file' as const, path: filePath }));
 
-        console.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
+        logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
 
         await session.sendAndWait({
           prompt,
@@ -223,16 +224,16 @@ IMPORTANT RULES:
         }, SESSION_TIMEOUT);
 
         this.currentSession = null;
-        console.log(`[${this.model}] Processing complete`);
+        logger.log(`[${this.model}] Processing complete`);
         return;
       } catch (err) {
         this.currentSession = null;
         const msg = (err as Error).message || '';
-        console.log(`[${this.model}] Attempt ${attempt}/${MAX_RETRIES} failed: ${msg.slice(0, 120)}`);
+        logger.log(`[${this.model}] Attempt ${attempt}/${MAX_RETRIES} failed: ${msg.slice(0, 120)}`);
 
         // Session timeout = normal session expiry, not an error
         if (msg.includes('Timeout') && msg.includes('session.idle')) {
-          console.log(`[${this.model}] Session expired after timeout, ending normally`);
+          logger.log(`[${this.model}] Session expired after timeout, ending normally`);
           return;
         }
 
@@ -251,9 +252,9 @@ IMPORTANT RULES:
         if (attempt === MAX_RETRIES) {
           const isTransient = msg.includes('Connection is closed') || msg.includes('ConnectionError');
           if (isTransient) {
-            console.error(`[${this.model}] Connection failed after ${MAX_RETRIES} retries, message dropped`);
+            logger.error(`[${this.model}] Connection failed after ${MAX_RETRIES} retries, message dropped`);
           } else {
-            console.error(`[${this.model}] Error:`, err);
+            logger.error(`[${this.model}] Error:`, err);
             await this.messenger.sendError(msg);
           }
         }

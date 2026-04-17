@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Messenger } from '../core/messenger.js';
 import type { MessageInfo, ChannelInfo, ServerInfo } from '../core/messenger.js';
+import { logger } from '../core/logger.js';
 
 export class DiscordMessenger extends Messenger {
   readonly channelId: string;
@@ -95,7 +96,7 @@ export class DiscordMessenger extends Messenger {
 
   protected applyIdle(): void {
     if (!this.client.user) return;
-    console.log('[Discord] Presence: idle');
+    logger.log('[Discord] Presence: idle');
     this.client.user.setPresence({ status: 'idle', activities: [] });
   }
 

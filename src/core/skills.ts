@@ -4,6 +4,7 @@ import { readdir, readFile, writeFile, unlink } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
+import { logger } from './logger.js';
 
 /** Plain tool definition exported by skill files (no SDK dependency needed). */
 interface RawTool {
@@ -49,9 +50,9 @@ export class SkillLoader {
             handler: t.handler,
           }));
         }
-        if (rawTools.length) console.log(`[skills] ${file}: ${rawTools.length} tool(s)`);
+        if (rawTools.length) logger.log(`[skills] ${file}: ${rawTools.length} tool(s)`);
       } catch (err) {
-        console.error(`[skills] Failed to load ${file}:`, err);
+        logger.error(`[skills] Failed to load ${file}:`, err);
       }
     }
     return sdkTools;

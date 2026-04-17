@@ -1,5 +1,6 @@
 import type { PermissionRequest, PermissionRequestResult, PermissionHandler } from '@github/copilot-sdk';
 import type { Messenger } from './messenger.js';
+import { logger } from './logger.js';
 
 export type PermissionKind = PermissionRequest['kind'];
 
@@ -44,7 +45,7 @@ function describeRequest(request: PermissionRequest): string {
 
   // Log the full request for debugging
   const { kind, toolCallId, ...rest } = r;
-  console.log(`[Permission] kind=${kind}`, JSON.stringify(rest).slice(0, 500));
+  logger.log(`[Permission] kind=${kind}`, JSON.stringify(rest).slice(0, 500));
 
   switch (request.kind) {
     case 'shell': {

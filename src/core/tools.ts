@@ -2,6 +2,7 @@ import { defineTool } from '@github/copilot-sdk';
 import { z } from 'zod';
 import { Inbox } from './inbox.js';
 import type { Messenger } from './messenger.js';
+import { logger } from './logger.js';
 
 export interface ToolContext {
   model: string;
@@ -89,7 +90,7 @@ export function createTools(ctx: ToolContext) {
         ctx.messenger.setStatus('👀 check_message');
 
         const items = ctx.queue.drain();
-        console.log(`[${ctx.model}] Checking messages (${items.length})`);
+        logger.log(`[${ctx.model}] Checking messages (${items.length})`);
         return {
           messages: items.map(item => ({
             id: item.message.id,
