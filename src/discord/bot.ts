@@ -11,9 +11,11 @@ import path from 'path';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
+import { PromptLoader } from '../core/prompts.js';
 
 export class DiscordBot extends Bot {
   readonly discord: Client;
+  private promptLoader: PromptLoader;
 
   constructor() {
     super();
@@ -26,6 +28,10 @@ export class DiscordBot extends Bot {
       ],
     });
 
+    // Initialize prompt loader
+    const promptsDir = process.env.PROMPTS_DIR;
+    this.promptLoader = new PromptLoader(promptsDir);
+
     this.setupEventHandlers();
   }
 
@@ -36,6 +42,10 @@ export class DiscordBot extends Bot {
   private async registerSlashCommands(): Promise<void> {
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token || !this.discord.user) return;
+
+    // Load prompt files
+    await this.promptLoader.loadPrompts();
+    const prompts = this.promptLoader.getAllPrompts();
 
     const commands = [
       new SlashCommandBuilder()
@@ -62,12 +72,31 @@ export class DiscordBot extends Bot {
                   { name: 'high', value: 'high' },
                   { name: 'xhigh', value: 'xhigh' },
                 ))),
-    ].map(cmd => cmd.toJSON());
+    ];
+
+    // Add prompt file commands
+    for (const prompt of prompts) {
+      const builder = new SlashCommandBuilder()
+        .setName(prompt.name)
+        .setDescription(prompt.description || `Run ${prompt.name} prompt`);
+      
+      // Add optional argument if hint is provided
+      if (prompt.argumentHint) {
+        builder.addStringOption(opt =>
+          opt.setName('args')
+            .setDescription(prompt.argumentHint)
+            .setRequired(false)
+        );
+      }
+
+      commands.push(builder);
+      console.log(`[BOT] Registered prompt command: /${prompt.name}`);
+    }
 
     const rest = new REST().setToken(token);
     try {
-      await rest.put(Routes.applicationCommands(this.discord.user.id), { body: commands });
-      console.log('[BOT] Slash commands registered');
+      await rest.put(Routes.applicationCommands(this.discord.user.id), { body: commands.map(cmd => cmd.toJSON()) });
+      console.log(`[BOT] Registered ${commands.length} slash commands (${prompts.length} prompts)`);
     } catch (err) {
       console.error('[BOT] Failed to register slash commands:', err);
     }
@@ -109,6 +138,38 @@ export class DiscordBot extends Bot {
         const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
         await interaction.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
       }
+      return;
+    }
+
+    // Check if this is a prompt command
+    const prompt = this.promptLoader.getPrompt(interaction.commandName);
+    if (prompt) {
+      await interaction.deferReply();
+      
+      // Get optional arguments
+      const args = interaction.options.getString('args') || '';
+      
+      // Construct the full prompt
+      let fullPrompt = prompt.content;
+      if (args) {
+        fullPrompt = `${fullPrompt}\n\nAdditional context: ${args}`;
+      }
+
+      // Send to agent
+      const agent = this.getOrCreateAgent(interaction.channelId);
+      const incoming = {
+        id: interaction.id,
+        author: interaction.user.username,
+        content: fullPrompt,
+      };
+
+      try {
+        await agent.processMessage(incoming, [], []);
+        await interaction.editReply(`✅ Executed prompt: \`${prompt.name}\``);
+      } catch (err) {
+        await interaction.editReply(`❌ Failed to execute prompt: ${(err as Error).message}`);
+      }
+      return;
     }
   }
 
