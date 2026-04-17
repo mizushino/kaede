@@ -55,7 +55,22 @@ export class DiscordBot extends Bot {
         const modelIdx = parts.indexOf('!model');
         const modelId = parts[modelIdx + 1];
         const effort = parts[modelIdx + 2] as 'low' | 'medium' | 'high' | 'xhigh' | undefined;
-        if (!modelId) {
+
+        if (modelId === 'list') {
+          try {
+            const client = await this.clientManager.getClient();
+            const models = await client.listModels();
+            const lines = models.map(m => {
+              const ctx = m.capabilities.limits.max_context_window_tokens?.toLocaleString() ?? '?';
+              const prompt = m.capabilities.limits.max_prompt_tokens?.toLocaleString();
+              const reasoning = m.supportedReasoningEfforts?.join('/') ?? '-';
+              return `\`${m.id}\` — ctx: ${ctx}${prompt ? ` / prompt: ${prompt}` : ''} / reasoning: ${reasoning}`;
+            });
+            await message.reply(`**Available models (${models.length}):**\n${lines.join('\n')}`);
+          } catch (err) {
+            await message.reply(`❌ Failed to list models: ${(err as Error).message}`);
+          }
+        } else if (!modelId) {
           const agent = this.getOrCreateAgent(message.channel.id);
           const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
           await message.reply(`Current model: \`${agent.model}\`${current}`);

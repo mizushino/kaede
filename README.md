@@ -132,6 +132,7 @@ Bot へのメンションが必要です（`@BotName !command`）。
 | `!reset` | 現在のセッションをリセット（会話履歴・CLI セッションを削除） |
 | `!model <modelId> [effort]` | 使用モデルを切り替え（例: `!model claude-sonnet-4.6 high`） |
 | `!model` | 現在のモデルと推論レベルを表示 |
+| `!model list` | 利用可能なモデル一覧を表示（コンテキスト数・推論レベル対応含む） |
 
 `effort` は `low` / `medium` / `high` / `xhigh` を指定可能。省略時はデフォルト値を使用します。
 
