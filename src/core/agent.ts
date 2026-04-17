@@ -18,6 +18,7 @@ const truncate = (s: string, n = 120) => s.length > n ? s.slice(0, n) + '…' : 
 
 export class Agent implements ToolContext {
   model: string;
+  reasoningEffort: ReasoningEffort | '';
   messenger: Messenger;
   queue = new Inbox();
   readonly skillLoader: SkillLoader;
@@ -26,33 +27,37 @@ export class Agent implements ToolContext {
   private workspaceDir: string;
   private permissionConfig: PermissionConfig;
   private processingPromise: Promise<void> | null = null;
+  private currentSession: CopilotSession | null = null;
+  private resumeOnNextMessage = false;
 
   constructor(messenger: Messenger, workspaceDir: string, model: string, clientManager: CopilotClientManager) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
+    this.reasoningEffort = REASONING_EFFORT;
     this.clientManager = clientManager;
     this.permissionConfig = loadPermissionConfig();
     this.skillLoader = new SkillLoader(path.join(workspaceDir, 'skills'));
   }
 
-  private async createFreshSession(): Promise<CopilotSession> {
-    const client = await this.clientManager.getClient();
+  async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
+    this.model = model;
+    if (reasoningEffort !== undefined) this.reasoningEffort = reasoningEffort;
+    if (this.currentSession) {
+      // Disconnect without deleting — session history on disk is preserved for resumeSession()
+      try { await this.currentSession.disconnect(); } catch { /* ignore */ }
+      this.currentSession = null;
+      this.resumeOnNextMessage = true;
+    }
+  }
+
+  private buildSessionConfig() {
     const channelId = this.messenger.channelId;
-    const sessionId = `ch_${channelId}`;
-
-    // Clean up any existing session with this ID
-    try { await client.deleteSession(sessionId); } catch { /* may not exist */ }
-
-    // Load skill tools (re-imported each session for hot-reload)
-    const skillTools = await this.skillLoader.loadTools(this);
-
-    const session = await client.createSession({
-      sessionId,
+    return {
       model: this.model,
-      ...(REASONING_EFFORT ? { reasoningEffort: REASONING_EFFORT } : {}),
+      ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
       onPermissionRequest: createPermissionHandler(this.messenger, this.permissionConfig),
-      onUserInputRequest: async (request) => {
+      onUserInputRequest: async (request: { question: string; choices?: string[]; allowFreeform?: boolean }) => {
         const { answer, wasFreeform } = await this.messenger.requestUserInput(
           request.question,
           request.choices,
@@ -60,7 +65,7 @@ export class Agent implements ToolContext {
         );
         return { answer, wasFreeform };
       },
-      tools: [...createTools(this), ...this.skillLoader.createTools(this), ...skillTools],
+      tools: [...createTools(this), ...this.skillLoader.createTools(this)],
       systemMessage: {
         content: `You are a helpful AI assistant operating in a chat channel.
 Your working directory is ${path.resolve(this.workspaceDir)}.
@@ -73,10 +78,51 @@ Tools: list_skills, read_skill, write_skill, delete_skill, run_skill
 
 After responding, call wait_messages to wait for new messages.`,
       },
-    });
+    };
+  }
 
+  private async createFreshSession(): Promise<CopilotSession> {
+    const client = await this.clientManager.getClient();
+    const channelId = this.messenger.channelId;
+    const sessionId = `ch_${channelId}`;
+
+    // Load skill tools (re-imported each session for hot-reload)
+    const skillTools = await this.skillLoader.loadTools(this);
+    const config = this.buildSessionConfig();
+    config.tools = [...config.tools, ...skillTools];
+
+    // Try to resume an existing session first (preserves history across restarts)
+    try {
+      const session = await client.resumeSession(sessionId, config);
+      this.setupEventHandlers(session);
+      this.currentSession = session;
+      console.log(`[${this.model}] Resumed existing session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
+      return session;
+    } catch {
+      // No existing session — create fresh
+    }
+
+    try { await client.deleteSession(sessionId); } catch { /* may not exist */ }
+    const session = await client.createSession({ sessionId, ...config });
     this.setupEventHandlers(session);
+    this.currentSession = session;
     console.log(`[${this.model}] Created session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
+    return session;
+  }
+
+  private async resumeSession(): Promise<CopilotSession> {
+    const client = await this.clientManager.getClient();
+    const sessionId = `ch_${this.messenger.channelId}`;
+
+    const skillTools = await this.skillLoader.loadTools(this);
+    const config = this.buildSessionConfig();
+    config.tools = [...config.tools, ...skillTools];
+
+    const session = await client.resumeSession(sessionId, config);
+    this.setupEventHandlers(session);
+    this.currentSession = session;
+    this.resumeOnNextMessage = false;
+    console.log(`[${this.model}] Resumed session ${sessionId} with new model`);
     return session;
   }
 
@@ -157,7 +203,9 @@ After responding, call wait_messages to wait for new messages.`,
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       const gen = this.clientManager.generation;
       try {
-        const session = await this.createFreshSession();
+        const session = this.resumeOnNextMessage
+          ? await this.resumeSession()
+          : await this.createFreshSession();
 
         const prompt = this.buildPrompt(items);
         const imageAttachments = items
@@ -171,9 +219,11 @@ After responding, call wait_messages to wait for new messages.`,
           ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
         }, SESSION_TIMEOUT);
 
+        this.currentSession = null;
         console.log(`[${this.model}] Processing complete`);
         return;
       } catch (err) {
+        this.currentSession = null;
         const msg = (err as Error).message || '';
         console.log(`[${this.model}] Attempt ${attempt}/${MAX_RETRIES} failed: ${msg.slice(0, 120)}`);
 
@@ -234,8 +284,18 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
   // --- Lifecycle ---
 
   dispose(): void {
+    if (this.currentSession) {
+      this.currentSession.disconnect().catch(() => {});
+      this.currentSession = null;
+    }
     this.queue.abort();
     this.messenger.stopTyping();
     this.messenger.clearStatus();
+  }
+
+  async deleteCliSession(): Promise<void> {
+    const client = await this.clientManager.getClient();
+    const sessionId = `ch_${this.messenger.channelId}`;
+    try { await client.deleteSession(sessionId); } catch { /* may not exist */ }
   }
 }

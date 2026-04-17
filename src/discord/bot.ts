@@ -98,3 +98,23 @@ export class DiscordBot extends Bot {
     this.discord.destroy();
   }
 }
+
+      // Model switch command: !model <modelId> [reasoningEffort]
+      // Requires bot mention to avoid multiple bots all responding
+      if (message.content.includes('!model') && message.mentions.users.has(this.discord.user!.id)) {
+        const parts = message.content.trim().split(/\s+/);
+        const modelIdx = parts.indexOf('!model');
+        const modelId = parts[modelIdx + 1];
+        const effort = parts[modelIdx + 2] as 'low' | 'medium' | 'high' | 'xhigh' | undefined;
+        if (!modelId) {
+          const agent = this.getOrCreateAgent(message.channel.id);
+          const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
+          await message.reply(`現在のモデル: \`${agent.model}\`${current}`);
+        } else {
+          const agent = this.getOrCreateAgent(message.channel.id);
+          await agent.setModel(modelId, effort ?? '');
+          const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
+          await message.reply(`✅ モデルを \`${modelId}\`${effortNote} に切り替えました`);
+        }
+        return;
+      }

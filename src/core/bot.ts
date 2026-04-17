@@ -49,10 +49,11 @@ export abstract class Bot {
     return agent;
   }
 
-  protected resetAgent(channelId: string): Agent | undefined {
+  protected async resetAgent(channelId: string): Promise<Agent | undefined> {
     const agent = this.sessions.get(channelId);
     if (agent) {
       agent.dispose();
+      await agent.deleteCliSession();
       this.sessions.delete(channelId);
     }
     return agent;
