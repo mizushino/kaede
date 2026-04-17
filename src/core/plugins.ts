@@ -23,7 +23,7 @@ export class PluginLoader {
   }
 
   /** Import a plugin file and return its raw tools. Always loads fresh (no cache). */
-  private async importSkill(file: string, ctx: unknown): Promise<RawTool[]> {
+  private async importPlugin(file: string, ctx: unknown): Promise<RawTool[]> {
     const filePath = path.join(this.pluginsDir, file);
     // Clear the CJS require cache so edits to plugin files take effect immediately.
     const _require = createRequire(__filename);
@@ -41,7 +41,7 @@ export class PluginLoader {
 
     for (const file of files) {
       try {
-        const rawTools = await this.importSkill(file, ctx);
+        const rawTools = await this.importPlugin(file, ctx);
         for (const t of rawTools) {
           sdkTools.push(defineTool(t.name, {
             description: t.description,
@@ -138,7 +138,7 @@ export class PluginLoader {
         skipPermission: true,
         handler: async ({ filename, tool, args }) => {
           try {
-            const rawTools = await this.importSkill(this.sanitize(filename), ctx);
+            const rawTools = await this.importPlugin(this.sanitize(filename), ctx);
             const t = rawTools.find(t => t.name === tool);
             if (!t) return { error: `Tool '${tool}' not found. Available: ${rawTools.map(t => t.name).join(', ')}` };
             return await t.handler(args ?? {});
