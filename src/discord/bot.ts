@@ -80,14 +80,12 @@ export class DiscordBot extends Bot {
         .setName(prompt.name)
         .setDescription(prompt.description || `Run ${prompt.name} prompt`);
       
-      // Add optional argument if hint is provided
-      if (prompt.argumentHint) {
-        builder.addStringOption(opt =>
-          opt.setName('args')
-            .setDescription(prompt.argumentHint || 'Additional arguments')
-            .setRequired(false)
-        );
-      }
+      // Always add optional args parameter
+      builder.addStringOption(opt =>
+        opt.setName('args')
+          .setDescription(prompt.argumentHint || 'Additional context or arguments')
+          .setRequired(false)
+      );
 
       commands.push(builder);
       console.log(`[BOT] Registered prompt command: /${prompt.name}`);
