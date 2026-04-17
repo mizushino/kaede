@@ -41,10 +41,8 @@ export class DiscordBot extends Bot {
       // Reset command — requires bot mention to avoid multiple bots all responding
       if (message.content.includes('!reset')
         && message.mentions.users.has(this.discord.user!.id)) {
-        const agent = await this.resetAgent(message.channel.id);
-        if (agent) {
-          await message.reply(`🔄 Reset ${agent.model} session`);
-        }
+        await this.resetAgent(message.channel.id);
+        await message.reply(`🔄 Session reset`);
         return;
       }
 
