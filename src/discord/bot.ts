@@ -84,7 +84,7 @@ export class DiscordBot extends Bot {
       if (prompt.argumentHint) {
         builder.addStringOption(opt =>
           opt.setName('args')
-            .setDescription(prompt.argumentHint)
+            .setDescription(prompt.argumentHint || 'Additional arguments')
             .setRequired(false)
         );
       }
