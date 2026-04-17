@@ -58,12 +58,12 @@ export class DiscordBot extends Bot {
         if (!modelId) {
           const agent = this.getOrCreateAgent(message.channel.id);
           const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
-          await message.reply(`現在のモデル: \`${agent.model}\`${current}`);
+          await message.reply(`Current model: \`${agent.model}\`${current}`);
         } else {
           const agent = this.getOrCreateAgent(message.channel.id);
           await agent.setModel(modelId, effort ?? '');
           const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
-          await message.reply(`✅ モデルを \`${modelId}\`${effortNote} に切り替えました`);
+          await message.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
         }
         return;
       }
