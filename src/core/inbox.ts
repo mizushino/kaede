@@ -39,6 +39,7 @@ export class Inbox {
   /** Block until a message arrives or WAIT_TIMEOUT elapses. */
   async waitForMessage(): Promise<void> {
     if (this.aborted) return;
+    if (this.items.length > 0) return;  // already have messages, no need to wait
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
         this.wakeResolve = null;
