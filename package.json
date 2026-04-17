@@ -1,6 +1,7 @@
 {
   "name": "kaede",
   "version": "1.0.0",
+  "type": "module",
   "description": "kaede - Discord Bot with GitHub Copilot SDK integration",
   "main": "dist/index.js",
   "scripts": {
