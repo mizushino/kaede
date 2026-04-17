@@ -1,4 +1,12 @@
-import { Client, GatewayIntentBits, Message } from 'discord.js';
+import {
+  Client,
+  GatewayIntentBits,
+  Message,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+} from 'discord.js';
 import path from 'path';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
@@ -25,10 +33,95 @@ export class DiscordBot extends Bot {
     return new DiscordMessenger(this.discord, channelId);
   }
 
+  private async registerSlashCommands(): Promise<void> {
+    const token = process.env.DISCORD_BOT_TOKEN;
+    if (!token || !this.discord.user) return;
+
+    const commands = [
+      new SlashCommandBuilder()
+        .setName('reset')
+        .setDescription('Reset the current AI session'),
+      new SlashCommandBuilder()
+        .setName('model')
+        .setDescription('View or switch the AI model')
+        .addSubcommand(sub =>
+          sub.setName('get').setDescription('Show current model'))
+        .addSubcommand(sub =>
+          sub.setName('list').setDescription('List available models'))
+        .addSubcommand(sub =>
+          sub.setName('set')
+            .setDescription('Switch to a different model')
+            .addStringOption(opt =>
+              opt.setName('model_id').setDescription('Model ID').setRequired(true))
+            .addStringOption(opt =>
+              opt.setName('effort')
+                .setDescription('Reasoning effort level')
+                .addChoices(
+                  { name: 'low', value: 'low' },
+                  { name: 'medium', value: 'medium' },
+                  { name: 'high', value: 'high' },
+                  { name: 'xhigh', value: 'xhigh' },
+                ))),
+    ].map(cmd => cmd.toJSON());
+
+    const rest = new REST().setToken(token);
+    try {
+      await rest.put(Routes.applicationCommands(this.discord.user.id), { body: commands });
+      console.log('[BOT] Slash commands registered');
+    } catch (err) {
+      console.error('[BOT] Failed to register slash commands:', err);
+    }
+  }
+
+  private async handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+    if (interaction.commandName === 'reset') {
+      await this.resetAgent(interaction.channelId);
+      await interaction.reply('🔄 Session reset');
+      return;
+    }
+
+    if (interaction.commandName === 'model') {
+      const sub = interaction.options.getSubcommand();
+
+      if (sub === 'list') {
+        await interaction.deferReply();
+        try {
+          const client = await this.clientManager.getClient();
+          const models = await client.listModels();
+          const lines = models.map(m => {
+            const multiplier = m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?';
+            const reasoning = m.supportedReasoningEfforts?.join('/') ?? '-';
+            return `\`${m.id}\` — cost: ${multiplier} / reasoning: ${reasoning}`;
+          });
+          await interaction.editReply(`**Available models (${models.length}):**\n${lines.join('\n')}`);
+        } catch (err) {
+          await interaction.editReply(`❌ Failed to list models: ${(err as Error).message}`);
+        }
+      } else if (sub === 'get') {
+        const agent = this.getOrCreateAgent(interaction.channelId);
+        const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
+        await interaction.reply(`Current model: \`${agent.model}\`${current}`);
+      } else if (sub === 'set') {
+        const modelId = interaction.options.getString('model_id', true);
+        const effort = (interaction.options.getString('effort') ?? '') as 'low' | 'medium' | 'high' | 'xhigh' | '';
+        const agent = this.getOrCreateAgent(interaction.channelId);
+        await agent.setModel(modelId, effort);
+        const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
+        await interaction.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
+      }
+    }
+  }
+
   private setupEventHandlers(): void {
-    this.discord.once('clientReady', () => {
+    this.discord.once('clientReady', async () => {
       console.log(`[BOT] Ready as ${this.discord.user?.tag}`);
       this.discord.user?.setPresence({ status: 'idle', activities: [] });
+      await this.registerSlashCommands();
+    });
+
+    this.discord.on('interactionCreate', async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+      await this.handleSlashCommand(interaction as ChatInputCommandInteraction);
     });
 
     this.discord.on('messageCreate', async (message: Message) => {
@@ -37,48 +130,6 @@ export class DiscordBot extends Bot {
       if (this.isDuplicate(message.id)) return;
 
       console.log(`[BOT] Message from ${message.author.username}: ${message.content || '[Attachments]'}`);
-
-      // Reset command — requires bot mention to avoid multiple bots all responding
-      if (message.content.includes('!reset')
-        && message.mentions.users.has(this.discord.user!.id)) {
-        await this.resetAgent(message.channel.id);
-        await message.reply(`🔄 Session reset`);
-        return;
-      }
-
-      // Model switch command: !model <modelId> [reasoningEffort]
-      // Requires bot mention to avoid multiple bots all responding
-      if (message.content.includes('!model') && message.mentions.users.has(this.discord.user!.id)) {
-        const parts = message.content.trim().split(/\s+/);
-        const modelIdx = parts.indexOf('!model');
-        const modelId = parts[modelIdx + 1];
-        const effort = parts[modelIdx + 2] as 'low' | 'medium' | 'high' | 'xhigh' | undefined;
-
-        if (modelId === 'list') {
-          try {
-            const client = await this.clientManager.getClient();
-            const models = await client.listModels();
-            const lines = models.map(m => {
-              const multiplier = m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?';
-              const reasoning = m.supportedReasoningEfforts?.join('/') ?? '-';
-              return `\`${m.id}\` — cost: ${multiplier} / reasoning: ${reasoning}`;
-            });
-            await message.reply(`**Available models (${models.length}):**\n${lines.join('\n')}`);
-          } catch (err) {
-            await message.reply(`❌ Failed to list models: ${(err as Error).message}`);
-          }
-        } else if (!modelId) {
-          const agent = this.getOrCreateAgent(message.channel.id);
-          const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
-          await message.reply(`Current model: \`${agent.model}\`${current}`);
-        } else {
-          const agent = this.getOrCreateAgent(message.channel.id);
-          await agent.setModel(modelId, effort ?? '');
-          const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
-          await message.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
-        }
-        return;
-      }
 
       // Download attachments
       const imageAttachments: string[] = [];
