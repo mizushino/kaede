@@ -95,7 +95,7 @@ export class PluginLoader {
       }),
 
       defineTool('write_plugin', {
-        description: `Create or overwrite a plugin file. Must export: name (string), description (string), createTools(ctx) returning array of {name, description, parameters: z.object(...), handler: async (args) => result}. No SDK import needed — only zod. Use run_skill to invoke immediately.`,
+        description: `Create or overwrite a plugin file. Must export: name (string), description (string), createTools(ctx) returning array of {name, description, parameters: z.object(...), handler: async (args) => result}. No SDK import needed — only zod. Use run_plugin to invoke immediately.`,
         parameters: z.object({
           filename: z.string().describe('e.g. "weather.ts"'),
           content: z.string().describe('Full TypeScript source'),
@@ -129,7 +129,7 @@ export class PluginLoader {
       }),
 
       defineTool('run_plugin', {
-        description: 'Run a tool from a plugin file. Use after write_skill to invoke immediately in this session.',
+        description: 'Run a tool from a plugin file. Use after write_plugin to invoke immediately in this session.',
         parameters: z.object({
           filename: z.string().describe('Plugin filename'),
           tool: z.string().describe('Tool name to invoke'),

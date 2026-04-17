@@ -74,7 +74,7 @@ Use the send_message tool to respond to users. Always respond in the same langua
 You may reply to a specific message by including the messageId parameter.
 The current channel ID is: ${channelId}
 
-You have a self-modifiable plugin system (skills dir: ${this.pluginLoader.pluginsDir}).
+You have a self-modifiable plugin system (plugins dir: ${this.pluginLoader.pluginsDir}).
 Tools: list_plugins, read_plugin, write_plugin, delete_plugin, run_plugin
 
 IMPORTANT RULES:
@@ -91,16 +91,16 @@ IMPORTANT RULES:
     const sessionId = `ch_${channelId}`;
 
     // Load plugin tools (re-imported each session for hot-reload)
-    const skillTools = await this.pluginLoader.loadTools(this);
+    const pluginTools = await this.pluginLoader.loadTools(this);
     const config = this.buildSessionConfig();
-    config.tools = [...config.tools, ...skillTools];
+    config.tools = [...config.tools, ...pluginTools];
 
     // Try to resume an existing session first (preserves history across restarts)
     try {
       const session = await client.resumeSession(sessionId, config);
       this.setupEventHandlers(session);
       this.currentSession = session;
-      logger.log(`[${this.model}] Resumed existing session ${sessionId} (${skillTools.length} plugin tool(s) loaded)`);
+      logger.log(`[${this.model}] Resumed existing session ${sessionId} (${pluginTools.length} plugin tool(s) loaded)`);
       return session;
     } catch {
       // No existing session — create fresh
@@ -110,7 +110,7 @@ IMPORTANT RULES:
     const session = await client.createSession({ sessionId, ...config });
     this.setupEventHandlers(session);
     this.currentSession = session;
-    logger.log(`[${this.model}] Created session ${sessionId} (${skillTools.length} plugin tool(s) loaded)`);
+    logger.log(`[${this.model}] Created session ${sessionId} (${pluginTools.length} plugin tool(s) loaded)`);
     return session;
   }
 
@@ -118,9 +118,9 @@ IMPORTANT RULES:
     const client = await this.clientManager.getClient();
     const sessionId = `ch_${this.messenger.channelId}`;
 
-    const skillTools = await this.pluginLoader.loadTools(this);
+    const pluginTools = await this.pluginLoader.loadTools(this);
     const config = this.buildSessionConfig();
-    config.tools = [...config.tools, ...skillTools];
+    config.tools = [...config.tools, ...pluginTools];
 
     const session = await client.resumeSession(sessionId, config);
     this.setupEventHandlers(session);

@@ -18,7 +18,7 @@ export abstract class Bot {
   constructor() {
     this.workspaceDir = process.env.WORKSPACE_DIR || 'workspace';
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
-    this.pluginsDir = process.env.SKILLS_DIR || path.join(this.workspaceDir, 'skills');
+    this.pluginsDir = process.env.PLUGINS_DIR || path.join(this.workspaceDir, 'plugins');
     this.model = process.env.COPILOT_MODEL || '';
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
