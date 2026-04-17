@@ -70,6 +70,7 @@ SESSION_TIMEOUT_MS=3600000      # セッションタイムアウト (default: 1h
 # ディレクトリ設定 (起動時に自動作成)
 WORKSPACE_DIR=./workspace       # AI の作業ディレクトリ（スキルは WORKSPACE_DIR/skills/ に配置）
 TEMPORARY_DIR=./tmp             # 添付画像等の一時保存先
+PROMPTS_DIR=                    # プロンプトディレクトリ (空={WORKSPACE_DIR}/.github/prompts)
 
 # 権限設定
 PERMISSION_AUTO_APPROVE=*       # 自動承認する操作種別 (*=全て, 空=全て確認, カンマ区切りで個別指定)
@@ -219,6 +220,31 @@ Discord のスラッシュコマンドとして利用できます。
 | `/model list` | 利用可能なモデル一覧を表示（コスト・推論レベル対応含む） |
 
 `effort` は `low` / `medium` / `high` / `xhigh` を指定可能。省略時はデフォルト値を使用します。
+
+### カスタムプロンプトコマンド
+
+`{WORKSPACE_DIR}/.github/prompts/` に `.prompt.md` ファイルを配置すると、ファイル名でスラッシュコマンドとして自動登録されます。
+
+**プロンプトファイルの形式:**
+
+```markdown
+---
+name: hello
+description: Greet the user with a friendly message
+argument-hint: Optional greeting style
+---
+
+Hello! I'm your AI assistant. How can I help you today?
+```
+
+- `name`: コマンド名（ファイル名が使われますが、上書き可能）
+- `description`: コマンドの説明（Discord で表示）
+- `argument-hint`: 引数の説明（省略可能、デフォルト: "Additional context or arguments"）
+
+**例:**
+
+- `hello.prompt.md` → `/hello` コマンドとして登録
+- `/hello [args]` で実行 → プロンプト内容に `args` を追加してAIに送信
 
 ## 🛠️ AI ツール
 
