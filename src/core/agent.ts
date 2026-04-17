@@ -4,7 +4,7 @@ import path from 'path';
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 import { CopilotClientManager } from './client.js';
 import { createTools, ToolContext } from './tools.js';
-import { SkillLoader } from './skills.js';
+import { PluginLoader } from './plugins.js';
 import { Inbox, QueuedMessage, IncomingMessage } from './inbox.js';
 import type { Messenger } from './messenger.js';
 import { loadPermissionConfig, createPermissionHandler, type PermissionConfig } from './permissions.js';
@@ -22,7 +22,7 @@ export class Agent implements ToolContext {
   reasoningEffort: ReasoningEffort | '';
   messenger: Messenger;
   queue = new Inbox();
-  readonly skillLoader: SkillLoader;
+  readonly pluginLoader: PluginLoader;
 
   private clientManager: CopilotClientManager;
   private workspaceDir: string;
@@ -31,14 +31,14 @@ export class Agent implements ToolContext {
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
 
-  constructor(messenger: Messenger, workspaceDir: string, skillsDir: string, model: string, clientManager: CopilotClientManager) {
+  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
     this.reasoningEffort = REASONING_EFFORT;
     this.clientManager = clientManager;
     this.permissionConfig = loadPermissionConfig();
-    this.skillLoader = new SkillLoader(skillsDir);
+    this.pluginLoader = new PluginLoader(pluginsDir);
   }
 
   async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
@@ -66,7 +66,7 @@ export class Agent implements ToolContext {
         );
         return { answer, wasFreeform };
       },
-      tools: [...createTools(this), ...this.skillLoader.createTools(this)],
+      tools: [...createTools(this), ...this.pluginLoader.createTools(this)],
       systemMessage: {
         content: `You are a helpful AI assistant operating in a chat channel.
 Your working directory is ${path.resolve(this.workspaceDir)}.
@@ -74,8 +74,8 @@ Use the send_message tool to respond to users. Always respond in the same langua
 You may reply to a specific message by including the messageId parameter.
 The current channel ID is: ${channelId}
 
-You have a self-modifiable skill system (skills dir: ${this.skillLoader.skillsDir}).
-Tools: list_skills, read_skill, write_skill, delete_skill, run_skill
+You have a self-modifiable plugin system (skills dir: ${this.pluginLoader.pluginsDir}).
+Tools: list_plugins, read_plugin, write_plugin, delete_plugin, run_plugin
 
 IMPORTANT RULES:
 - ALWAYS use the send_message tool to send responses. Never output text directly without calling send_message.
@@ -90,8 +90,8 @@ IMPORTANT RULES:
     const channelId = this.messenger.channelId;
     const sessionId = `ch_${channelId}`;
 
-    // Load skill tools (re-imported each session for hot-reload)
-    const skillTools = await this.skillLoader.loadTools(this);
+    // Load plugin tools (re-imported each session for hot-reload)
+    const skillTools = await this.pluginLoader.loadTools(this);
     const config = this.buildSessionConfig();
     config.tools = [...config.tools, ...skillTools];
 
@@ -100,7 +100,7 @@ IMPORTANT RULES:
       const session = await client.resumeSession(sessionId, config);
       this.setupEventHandlers(session);
       this.currentSession = session;
-      logger.log(`[${this.model}] Resumed existing session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
+      logger.log(`[${this.model}] Resumed existing session ${sessionId} (${skillTools.length} plugin tool(s) loaded)`);
       return session;
     } catch {
       // No existing session — create fresh
@@ -110,7 +110,7 @@ IMPORTANT RULES:
     const session = await client.createSession({ sessionId, ...config });
     this.setupEventHandlers(session);
     this.currentSession = session;
-    logger.log(`[${this.model}] Created session ${sessionId} (${skillTools.length} skill tool(s) loaded)`);
+    logger.log(`[${this.model}] Created session ${sessionId} (${skillTools.length} plugin tool(s) loaded)`);
     return session;
   }
 
@@ -118,7 +118,7 @@ IMPORTANT RULES:
     const client = await this.clientManager.getClient();
     const sessionId = `ch_${this.messenger.channelId}`;
 
-    const skillTools = await this.skillLoader.loadTools(this);
+    const skillTools = await this.pluginLoader.loadTools(this);
     const config = this.buildSessionConfig();
     config.tools = [...config.tools, ...skillTools];
 
@@ -160,10 +160,10 @@ IMPORTANT RULES:
       case 'glob':           return val('pattern');
       case 'grep':           return val('pattern');
       case 'web_fetch':      return val('url');
-      case 'write_skill':    return val('filename');
-      case 'read_skill':     return val('filename');
-      case 'delete_skill':   return val('filename');
-      case 'run_skill':      return ` | ${args.filename || ''}:${args.tool || ''}`;
+      case 'write_plugin':    return val('filename');
+      case 'read_plugin':     return val('filename');
+      case 'delete_plugin':   return val('filename');
+      case 'run_plugin':      return ` | ${args.filename || ''}:${args.tool || ''}`;
       case 'send_message':   return args.content ? `\n${truncate(String(args.content), 300)}` : '';
       case 'get_messages':   return val('channelId');
       default:               return Object.keys(args).length ? ` | ${truncate(JSON.stringify(args))}` : '';

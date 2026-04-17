@@ -9,7 +9,7 @@ import { logger } from './logger.js';
 export abstract class Bot {
   protected readonly workspaceDir: string;
   protected readonly temporaryDir: string;
-  protected readonly skillsDir: string;
+  protected readonly pluginsDir: string;
   protected readonly model: string;
   protected readonly clientManager = new CopilotClientManager();
   protected sessions = new Map<string, Agent>();
@@ -18,7 +18,7 @@ export abstract class Bot {
   constructor() {
     this.workspaceDir = process.env.WORKSPACE_DIR || 'workspace';
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
-    this.skillsDir = process.env.SKILLS_DIR || path.join(this.workspaceDir, 'skills');
+    this.pluginsDir = process.env.SKILLS_DIR || path.join(this.workspaceDir, 'skills');
     this.model = process.env.COPILOT_MODEL || '';
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
@@ -47,7 +47,7 @@ export abstract class Bot {
     if (!agent) {
       logger.log(`[BOT] Creating agent (model: ${this.model}) for channel ${channelId}`);
       const messenger = this.createMessenger(channelId);
-      agent = new Agent(messenger, this.workspaceDir, this.skillsDir, this.model, this.clientManager);
+      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager);
       this.sessions.set(channelId, agent);
     }
     return agent;

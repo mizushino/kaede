@@ -7,11 +7,11 @@ export const STATUS_ICON: Record<string, string> = {
   check_message:  '👀',
   wait_messages:  '',
   // Skill management
-  list_skills:    '🧩',
-  write_skill:    '✍️',
-  delete_skill:   '🗑️',
-  read_skill:     '📄',
-  run_skill:      '🚀',
+  list_plugins:    '🧩',
+  write_plugin:    '✍️',
+  delete_plugin:   '🗑️',
+  read_plugin:     '📄',
+  run_plugin:      '🚀',
   // Built-in: file operations
   view:           '📖',
   create:         '📝',
