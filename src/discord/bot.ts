@@ -95,10 +95,13 @@ export class DiscordBot extends Bot {
 
     const rest = new REST().setToken(token);
     try {
-      await rest.put(Routes.applicationCommands(this.discord.user.id), { body: commands.map(cmd => cmd.toJSON()) });
-      console.log(`[BOT] Registered ${commands.length} slash commands (${prompts.length} prompts)`);
+      const commandsJSON = commands.map(cmd => cmd.toJSON());
+      console.log(`[BOT] Registering ${commands.length} slash commands (${prompts.length} prompts)...`);
+      await rest.put(Routes.applicationCommands(this.discord.user.id), { body: commandsJSON });
+      console.log(`[BOT] Successfully registered ${commands.length} slash commands`);
     } catch (err) {
-      console.error('[BOT] Failed to register slash commands:', err);
+      console.error('[BOT] Failed to register slash commands:');
+      console.error(err);
     }
   }
 
