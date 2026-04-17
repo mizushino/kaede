@@ -119,7 +119,40 @@ Messenger (core/messenger.ts)         ← プラットフォーム抽象化
 
 プラットフォーム固有のコードは `discord/` に集約されており、`Messenger` 抽象クラスを実装すれば他のプラットフォームにも対応可能です。
 
-## 💬 Discord コマンド
+## 🤖 エージェント初期設定（AGENTS.md）
+
+AI の挙動・性格・ルールはワークスペースの `AGENTS.md` に記述することで制御できます。このファイルは Copilot SDK が自動的にシステムプロンプトに組み込みます。
+
+### チャットで AGENTS.md を作る
+
+ボットを起動後、チャット上で直接指示することで AGENTS.md を作成できます:
+
+```
+あなた自身の AGENTS.md を作ってください。
+```
+
+AI が `WORKSPACE_DIR/AGENTS.md` を作成します。その後も会話を通じて随時更新・改善していけます。
+
+### AGENTS.md の例
+
+```markdown
+# My Agent — Instructions
+
+## 基本ルール
+- 返信は必ず send_message ツールを使う
+- 返信後は必ず wait_messages を呼ぶ
+
+## 性格
+- 親しみやすく、丁寧に
+- わからないことは正直に伝える
+
+## 自己改善
+気づいたことはこのファイルに追記する。
+```
+
+> **Note:** `.github/copilot-instructions.md` も同様に自動読み込みされます。プロジェクト共通のコーディング規約などはそちらに記述するのが一般的です。
+
+
 
 Bot へのメンションが必要です（`@BotName !command`）。
 
