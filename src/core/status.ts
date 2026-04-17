@@ -27,7 +27,7 @@ export const STATUS_ICON: Record<string, string> = {
   // Built-in: network & AI
   web_fetch:      '🌐',
   report_intent:  '💭',
-  plugin:         '🔌',
+  plugin:         '🧩',
   task:           '📌',
   sql:            '🗄️',
   read_agent:     '🤖',
