@@ -136,12 +136,10 @@ IMPORTANT RULES:
       const args = event?.data?.parameters || event?.data?.arguments || event?.data?.args || {};
       const detail = this.formatToolDetail(toolName, args);
       const icon = STATUS_ICON[toolName] ?? '🤔';
-      if (icon) {
+      console.log(`[${this.model}] tool: ${toolName}${detail}`);
+      if (icon && toolName !== 'send_message') {
         const status = truncate(`${icon} ${toolName}${detail}`, 88);
-        console.log(`[${this.model}] tool: ${toolName}${detail}`);
-        if (toolName !== 'send_message') {
-          this.messenger.setStatus(status);
-        }
+        this.messenger.setStatus(status);
       }
     });
 
