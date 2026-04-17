@@ -30,14 +30,14 @@ export class Agent implements ToolContext {
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
 
-  constructor(messenger: Messenger, workspaceDir: string, model: string, clientManager: CopilotClientManager) {
+  constructor(messenger: Messenger, workspaceDir: string, skillsDir: string, model: string, clientManager: CopilotClientManager) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
     this.reasoningEffort = REASONING_EFFORT;
     this.clientManager = clientManager;
     this.permissionConfig = loadPermissionConfig();
-    this.skillLoader = new SkillLoader(path.join(workspaceDir, 'skills'));
+    this.skillLoader = new SkillLoader(skillsDir);
   }
 
   async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
