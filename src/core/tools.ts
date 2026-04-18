@@ -2,12 +2,14 @@ import { defineTool } from '@github/copilot-sdk';
 import { z } from 'zod';
 import { Inbox } from './inbox.js';
 import type { Messenger } from './messenger.js';
+import type { RequestCounter } from './counter.js';
 import { logger } from './logger.js';
 
 export interface ToolContext {
   model: string;
   queue: Inbox;
   messenger: Messenger;
+  counter: RequestCounter;
 }
 
 export function createTools(ctx: ToolContext) {
@@ -24,6 +26,7 @@ export function createTools(ctx: ToolContext) {
       handler: async ({ channelId, content, messageId, imagePath }) => {
         try {
           const messagesSent = await ctx.messenger.sendMessage(channelId, content, messageId, imagePath);
+          ctx.counter.incrementSendMessage();
           ctx.messenger.stopTyping();
           return { success: true, messagesSent };
         } catch (err: unknown) {
@@ -77,6 +80,7 @@ export function createTools(ctx: ToolContext) {
       parameters: z.object({}),
       skipPermission: true,
       handler: async () => {
+        ctx.counter.incrementWaitMessages();
         ctx.messenger.stopTyping();
         ctx.messenger.clearStatus();
 

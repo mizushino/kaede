@@ -1,5 +1,6 @@
 import { Agent } from './agent.js';
 import { CopilotClientManager } from './client.js';
+import { RequestCounter } from './counter.js';
 import type { Messenger } from './messenger.js';
 import fs from 'fs';
 import path from 'path';
@@ -12,6 +13,7 @@ export abstract class Bot {
   protected readonly pluginsDir: string;
   protected readonly model: string;
   protected readonly clientManager = new CopilotClientManager();
+  protected readonly counter: RequestCounter;
   protected sessions = new Map<string, Agent>();
   private processedMessages = new Set<string>();
 
@@ -20,6 +22,7 @@ export abstract class Bot {
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
     this.pluginsDir = process.env.PLUGINS_DIR || path.join(this.workspaceDir, 'plugins');
     this.model = process.env.COPILOT_MODEL || '';
+    this.counter = new RequestCounter(this.temporaryDir);
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
   }
@@ -47,7 +50,7 @@ export abstract class Bot {
     if (!agent) {
       logger.log(`[BOT] Creating agent (model: ${this.model}) for channel ${channelId}`);
       const messenger = this.createMessenger(channelId);
-      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager);
+      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager, this.counter);
       this.sessions.set(channelId, agent);
     }
     return agent;
@@ -71,6 +74,7 @@ export abstract class Bot {
       agent.dispose();
     }
     this.sessions.clear();
+    this.counter.flush();
     await this.clientManager.shutdown();
     logger.log('[BOT] Disconnected');
   }

@@ -10,6 +10,7 @@ import type { Messenger } from './messenger.js';
 import { loadPermissionConfig, createPermissionHandler, type PermissionConfig } from './permissions.js';
 import { STATUS_ICON } from './status.js';
 import { logger } from './logger.js';
+import type { RequestCounter } from './counter.js';
 
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000; // 3 hour
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
@@ -23,6 +24,7 @@ export class Agent implements ToolContext {
   messenger: Messenger;
   queue = new Inbox();
   readonly pluginLoader: PluginLoader;
+  readonly counter: RequestCounter;
 
   private clientManager: CopilotClientManager;
   private workspaceDir: string;
@@ -31,7 +33,7 @@ export class Agent implements ToolContext {
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
 
-  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager) {
+  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
@@ -39,6 +41,7 @@ export class Agent implements ToolContext {
     this.clientManager = clientManager;
     this.permissionConfig = loadPermissionConfig();
     this.pluginLoader = new PluginLoader(pluginsDir);
+    this.counter = counter;
   }
 
   async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
@@ -223,6 +226,7 @@ IMPORTANT RULES:
           ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
         }, SESSION_TIMEOUT);
 
+        this.counter.incrementSendAndWait(this.model);
         this.currentSession = null;
         logger.log(`[${this.model}] Processing complete`);
         return;
