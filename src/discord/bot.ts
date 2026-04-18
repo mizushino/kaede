@@ -53,6 +53,12 @@ export class DiscordBot extends Bot {
         .setName('reset')
         .setDescription('Reset the current AI session'),
       new SlashCommandBuilder()
+        .setName('stats')
+        .setDescription('Show request usage statistics'),
+      new SlashCommandBuilder()
+        .setName('restart')
+        .setDescription('Restart the bot process'),
+      new SlashCommandBuilder()
         .setName('model')
         .setDescription('View or switch the AI model')
         .addSubcommand(sub =>
@@ -108,6 +114,28 @@ export class DiscordBot extends Bot {
     if (interaction.commandName === 'reset') {
       await this.resetAgent(interaction.channelId);
       await interaction.reply('🔄 Session reset');
+      return;
+    }
+
+    if (interaction.commandName === 'stats') {
+      const counts = this.counter.getCounts();
+      const sawLines = Object.entries(counts.sendAndWait)
+        .map(([model, count]) => `  \`${model}\`: ${count}`)
+        .join('\n') || '  (none)';
+      await interaction.reply(
+        `📊 **Request Statistics**\n` +
+        `**sendAndWait** (per model):\n${sawLines}\n` +
+        `**wait_messages**: ${counts.waitMessages}\n` +
+        `**send_message**: ${counts.sendMessage}`
+      );
+      return;
+    }
+
+    if (interaction.commandName === 'restart') {
+      this.counter.flush();
+      await interaction.reply('🔄 Restarting...');
+      logger.log('[BOT] Restart requested via slash command');
+      setTimeout(() => process.exit(0), 1000);
       return;
     }
 
