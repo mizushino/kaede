@@ -148,12 +148,13 @@ export class DiscordBot extends Bot {
       const sawLines = Object.entries(counts.sendAndWait)
         .map(([model, count]) => `  \`${model}\`: ${count}`)
         .join('\n') || '  (none)';
-      await interaction.reply(
-        `📊 **Request Statistics**\n` +
-        `**sendAndWait** (per model):\n${sawLines}\n` +
-        `**wait_messages**: ${counts.waitMessages}\n` +
-        `**send_message**: ${counts.sendMessage}`
-      );
+      await interaction.reply({
+        content: `📊 **Request Statistics**\n` +
+          `**sendAndWait** (per model):\n${sawLines}\n` +
+          `**wait_messages**: ${counts.waitMessages}\n` +
+          `**send_message**: ${counts.sendMessage}`,
+        ephemeral: true,
+      });
       return;
     }
 
@@ -169,7 +170,7 @@ export class DiscordBot extends Bot {
       const sub = interaction.options.getSubcommand();
 
       if (sub === 'list') {
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
         try {
           const client = await this.clientManager.getClient();
           const models = await client.listModels();
@@ -185,7 +186,7 @@ export class DiscordBot extends Bot {
       } else if (sub === 'get') {
         const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
-        await interaction.reply(`Current model: \`${agent.model}\`${current}`);
+        await interaction.reply({ content: `Current model: \`${agent.model}\`${current}`, ephemeral: true });
       } else if (sub === 'set') {
         const modelId = interaction.options.getString('model_id', true);
         const effort = (interaction.options.getString('effort') ?? '') as 'low' | 'medium' | 'high' | 'xhigh' | '';
