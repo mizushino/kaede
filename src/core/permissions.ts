@@ -28,7 +28,7 @@ export function loadPermissionConfig(): PermissionConfig {
     autoApprove = new Set(parsed);
   }
 
-  const approvalTimeoutMs = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 120_000;
+  const approvalTimeoutMs = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 
   return { autoApprove, approvalTimeoutMs };
 }

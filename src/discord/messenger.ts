@@ -178,7 +178,7 @@ export class DiscordMessenger extends Messenger {
     }
 
     const botId = this.client.user?.id;
-    const timeoutMs = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 120_000;
+    const timeoutMs = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 
     // Wait for reaction (choice) or message (freeform) concurrently
     return new Promise<{ answer: string; wasFreeform: boolean }>((resolve) => {

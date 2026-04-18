@@ -11,7 +11,7 @@ import { loadPermissionConfig, createPermissionHandler, type PermissionConfig } 
 import { STATUS_ICON } from './status.js';
 import { logger } from './logger.js';
 
-const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 3_600_000; // 1 hour
+const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000; // 3 hour
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 const REASONING_EFFORT = (process.env.REASONING_EFFORT || '') as ReasoningEffort | '';
 

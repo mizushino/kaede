@@ -52,37 +52,10 @@ npm install
 
 ### 5. 環境変数の設定
 
-`.env.claude` をコピーして `.env.kaede` を作成:
+`.env.claude`または`.env.gpt` をコピーして `.env` を作成:
 
 ```sh
-cp .env.claude .env.kaede
-```
-
-```env
-# Bot 設定
-AGENT_NAME=agent                # エージェント名
-COPILOT_MODEL=claude-sonnet-4.6 # 使用する AI モデル
-REASONING_EFFORT=               # 推論レベル (low/medium/high/xhigh, 空=デフォルト)
-
-# タイムアウト設定
-WAIT_TIMEOUT_MS=600000          # メッセージ待機タイムアウト (default: 10min)
-SESSION_TIMEOUT_MS=3600000      # セッションタイムアウト (default: 1hour)
-
-# ディレクトリ設定 (起動時に自動作成)
-WORKSPACE_DIR=./workspace       # AI の作業ディレクトリ（プラグインは WORKSPACE_DIR/plugins/ に配置）
-TEMPORARY_DIR=./tmp             # 添付画像等の一時保存先
-PROMPTS_DIR=                    # プロンプトディレクトリ (空={WORKSPACE_DIR}/.github/prompts)
-
-# 権限設定
-PERMISSION_AUTO_APPROVE=*       # 自動承認する操作種別 (*=全て, 空=全て確認, カンマ区切りで個別指定)
-                                # 種別: shell, write, read, url, mcp, custom-tool
-USER_RESPONSE_TIMEOUT_MS=120000 # ユーザー承認待ちタイムアウト (default: 120s)
-
-# Discord
-DISCORD_BOT_TOKEN=your_bot_token_here
-
-# GitHub
-GITHUB_TOKEN=your_github_token_here
+cp .env.claude .env
 ```
 
 ### 6. GitHub トークンの設定
@@ -92,7 +65,7 @@ GITHUB_TOKEN=your_github_token_here
 - **Copilot Chat**
 - **Copilot Requests**
 
-生成したトークンを `.env.kaede` の `GITHUB_TOKEN` に設定します。
+生成したトークンを `.env` の `GITHUB_TOKEN` に設定します。
 
 ### 7. Discord Bot の作成
 
@@ -103,7 +76,7 @@ GITHUB_TOKEN=your_github_token_here
 2. 左メニューの **Bot** へ移動
 3. **Message Content Intent** を **ON** にする
 4. トークンをリセットして取得
-5. 取得したトークンを `.env.kaede` の `DISCORD_BOT_TOKEN` に設定
+5. 取得したトークンを `.env` の `DISCORD_BOT_TOKEN` に設定
 
 **OAuth2 設定:**
 
@@ -120,7 +93,7 @@ GITHUB_TOKEN=your_github_token_here
 ### 8. 起動
 
 ```sh
-AGENT=kaede npm start
+npm start
 ```
 
 ### 🤖 マルチエージェント
