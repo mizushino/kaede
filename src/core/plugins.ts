@@ -3,7 +3,6 @@ import { z, type ZodType } from 'zod';
 import { readdir, readFile, writeFile, unlink } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { logger } from './logger.js';
 
 /** Plain tool definition exported by plugin files (no SDK dependency needed). */
