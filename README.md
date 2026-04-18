@@ -111,6 +111,29 @@ npm run gpt
 
 エージェントごとに `.env.claude`, `.env.gpt` 等を用意し、`WORKSPACE_DIR` を分けることでプラグインやファイルを隔離できます。
 
+### 🔄 PM2 によるプロセス管理
+
+[PM2](https://pm2.keymetrics.io/) を使うと、Bot をバックグラウンドで常駐させ、クラッシュ時の自動再起動やシステム起動時の自動起動が可能になります。
+
+```sh
+# PM2 のインストール
+npm install -g pm2
+
+# システム起動時の自動起動を設定
+pm2 startup
+
+# Bot を起動
+pm2 start ecosystem.config.cjs
+
+# 現在のプロセスリストを保存（再起動時に自動復元）
+pm2 save
+
+# ログの確認
+pm2 logs kaede
+```
+
+マルチエージェント構成の場合は、`ecosystem.config.cjs` に複数のアプリ定義を追加してください。
+
 ## 📁 プロジェクト構成
 
 ```
