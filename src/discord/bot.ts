@@ -112,7 +112,7 @@ export class DiscordBot extends Bot {
 
   private async handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     if (interaction.commandName === 'reset') {
-      await this.resetAgent(interaction.channelId);
+      await this.resetAgent(interaction.channelId, interaction.guildId ?? undefined);
       await interaction.reply('🔄 Session reset');
       return;
     }
@@ -157,13 +157,13 @@ export class DiscordBot extends Bot {
           await interaction.editReply(`❌ Failed to list models: ${(err as Error).message}`);
         }
       } else if (sub === 'get') {
-        const agent = this.getOrCreateAgent(interaction.channelId);
+        const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
         await interaction.reply(`Current model: \`${agent.model}\`${current}`);
       } else if (sub === 'set') {
         const modelId = interaction.options.getString('model_id', true);
         const effort = (interaction.options.getString('effort') ?? '') as 'low' | 'medium' | 'high' | 'xhigh' | '';
-        const agent = this.getOrCreateAgent(interaction.channelId);
+        const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         await agent.setModel(modelId, effort);
         const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
         await interaction.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
@@ -186,9 +186,10 @@ export class DiscordBot extends Bot {
       }
 
       // Send to agent
-      const agent = this.getOrCreateAgent(interaction.channelId);
+      const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
       const incoming = {
         id: interaction.id,
+        channelId: interaction.channelId,
         author: interaction.user.username,
         content: fullPrompt,
       };
@@ -241,9 +242,10 @@ export class DiscordBot extends Bot {
         }
       }
 
-      const agent = this.getOrCreateAgent(message.channel.id);
+      const agent = this.getOrCreateAgent(message.channel.id, message.guildId ?? undefined);
       const incoming = {
         id: message.id,
+        channelId: message.channel.id,
         author: message.author.username,
         content: message.content,
       };

@@ -23,7 +23,7 @@ const MESSAGE_MAX_LENGTH = 2000;
 const STATUS_THROTTLE_MS = 1000;
 
 export abstract class Messenger {
-  abstract readonly channelId: string;
+  abstract channelId: string;
 
   // --- Message operations (platform-specific) ---
 

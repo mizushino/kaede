@@ -7,11 +7,14 @@ import path from 'path';
 import { writeFile } from 'fs/promises';
 import { logger } from './logger.js';
 
+export type SessionScope = 'channel' | 'server';
+
 export abstract class Bot {
   protected readonly workspaceDir: string;
   protected readonly temporaryDir: string;
   protected readonly pluginsDir: string;
   protected readonly model: string;
+  protected readonly sessionScope: SessionScope;
   protected readonly clientManager = new CopilotClientManager();
   protected readonly counter: RequestCounter;
   protected sessions = new Map<string, Agent>();
@@ -22,9 +25,11 @@ export abstract class Bot {
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
     this.pluginsDir = process.env.PLUGINS_DIR || path.join(this.workspaceDir, 'plugins');
     this.model = process.env.COPILOT_MODEL || '';
+    this.sessionScope = (process.env.SESSION_SCOPE as SessionScope) || 'channel';
     this.counter = new RequestCounter(this.temporaryDir);
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
+    logger.log(`[BOT] Session scope: ${this.sessionScope}`);
   }
 
   protected abstract createMessenger(channelId: string): Messenger;
@@ -45,23 +50,32 @@ export abstract class Bot {
     await writeFile(destPath, buffer);
   }
 
-  protected getOrCreateAgent(channelId: string): Agent {
-    let agent = this.sessions.get(channelId);
+  protected resolveSessionKey(channelId: string, guildId?: string): string {
+    return this.sessionScope === 'server' && guildId ? guildId : channelId;
+  }
+
+  protected getOrCreateAgent(channelId: string, guildId?: string): Agent {
+    const sessionKey = this.resolveSessionKey(channelId, guildId);
+    let agent = this.sessions.get(sessionKey);
     if (!agent) {
-      logger.log(`[BOT] Creating agent (model: ${this.model}) for channel ${channelId}`);
+      logger.log(`[BOT] Creating agent (model: ${this.model}, scope: ${this.sessionScope}) for ${this.sessionScope === 'server' ? 'server' : 'channel'} ${sessionKey}`);
       const messenger = this.createMessenger(channelId);
-      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager, this.counter);
-      this.sessions.set(channelId, agent);
+      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager, this.counter, sessionKey);
+      this.sessions.set(sessionKey, agent);
+    } else if (agent.messenger.channelId !== channelId) {
+      // Update active channel for typing indicators and status
+      agent.messenger.channelId = channelId;
     }
     return agent;
   }
 
-  protected async resetAgent(channelId: string): Promise<Agent | undefined> {
-    const agent = this.sessions.get(channelId);
+  protected async resetAgent(channelId: string, guildId?: string): Promise<Agent | undefined> {
+    const sessionKey = this.resolveSessionKey(channelId, guildId);
+    const agent = this.sessions.get(sessionKey);
     if (agent) {
       agent.dispose();
       await agent.deleteCliSession();
-      this.sessions.delete(channelId);
+      this.sessions.delete(sessionKey);
     }
     return agent;
   }

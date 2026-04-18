@@ -98,6 +98,7 @@ export function createTools(ctx: ToolContext) {
         return {
           messages: items.map(item => ({
             id: item.message.id,
+            channelId: item.message.channelId,
             author: item.message.author,
             content: item.message.content,
             attachments: item.attachments,

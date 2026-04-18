@@ -25,6 +25,7 @@ export class Agent implements ToolContext {
   queue = new Inbox();
   readonly pluginLoader: PluginLoader;
   readonly counter: RequestCounter;
+  readonly sessionKey: string;
 
   private clientManager: CopilotClientManager;
   private workspaceDir: string;
@@ -33,7 +34,7 @@ export class Agent implements ToolContext {
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
 
-  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter) {
+  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, sessionKey?: string) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
@@ -42,6 +43,7 @@ export class Agent implements ToolContext {
     this.permissionConfig = loadPermissionConfig();
     this.pluginLoader = new PluginLoader(pluginsDir);
     this.counter = counter;
+    this.sessionKey = sessionKey ?? messenger.channelId;
   }
 
   async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
@@ -90,8 +92,7 @@ IMPORTANT RULES:
 
   private async createFreshSession(): Promise<CopilotSession> {
     const client = await this.clientManager.getClient();
-    const channelId = this.messenger.channelId;
-    const sessionId = `ch_${channelId}`;
+    const sessionId = `session_${this.sessionKey}`;
 
     // Load plugin tools (re-imported each session for hot-reload)
     const pluginTools = await this.pluginLoader.loadTools(this);
@@ -119,7 +120,7 @@ IMPORTANT RULES:
 
   private async resumeSession(): Promise<CopilotSession> {
     const client = await this.clientManager.getClient();
-    const sessionId = `ch_${this.messenger.channelId}`;
+    const sessionId = `session_${this.sessionKey}`;
 
     const pluginTools = await this.pluginLoader.loadTools(this);
     const config = this.buildSessionConfig();
@@ -267,9 +268,9 @@ IMPORTANT RULES:
   }
 
   private buildPrompt(items: QueuedMessage[]): string {
-    const channelId = this.messenger.channelId;
     const messageData = items.map(item => ({
       id: item.message.id,
+      channelId: item.message.channelId,
       author: item.message.author,
       content: item.message.content,
       hasAttachments: item.attachments.length > 0,
@@ -285,7 +286,7 @@ IMPORTANT RULES:
 
 Important: Use send_message to respond. You may reply to a specific message by including its messageId. Only respond to messages that are direct replies or mentions to you. Do not respond to any other messages.
 send_message
-channelId:"${channelId}"
+channelId: (use the channelId from the message you want to reply to)
 messageId: (Optional - use the ID of the message you want to reply to from the JSON above)`;
   }
 
@@ -303,7 +304,7 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 
   async deleteCliSession(): Promise<void> {
     const client = await this.clientManager.getClient();
-    const sessionId = `ch_${this.messenger.channelId}`;
+    const sessionId = `session_${this.sessionKey}`;
     try { await client.deleteSession(sessionId); } catch { /* may not exist */ }
   }
 }

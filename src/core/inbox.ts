@@ -2,6 +2,7 @@ const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
 
 export interface IncomingMessage {
   id: string;
+  channelId: string;
   author: string;
   content: string;
 }
