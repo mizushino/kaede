@@ -1,6 +1,7 @@
 import { Agent } from './agent.js';
 import { CopilotClientManager } from './client.js';
 import { RequestCounter } from './counter.js';
+import { Scheduler } from './scheduler.js';
 import type { Messenger } from './messenger.js';
 import fs from 'fs';
 import path from 'path';
@@ -17,6 +18,7 @@ export abstract class Bot {
   protected readonly sessionScope: SessionScope;
   protected readonly clientManager = new CopilotClientManager();
   protected readonly counter: RequestCounter;
+  protected readonly scheduler: Scheduler;
   protected sessions = new Map<string, Agent>();
   private processedMessages = new Set<string>();
 
@@ -27,6 +29,10 @@ export abstract class Bot {
     this.model = process.env.COPILOT_MODEL || '';
     this.sessionScope = (process.env.SESSION_SCOPE as SessionScope) || 'channel';
     this.counter = new RequestCounter(this.temporaryDir);
+    this.scheduler = new Scheduler(
+      path.join(this.workspaceDir, 'schedules.json'),
+      (entry) => this.onScheduleFire(entry),
+    );
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
     logger.log(`[BOT] Session scope: ${this.sessionScope}`);
@@ -60,7 +66,7 @@ export abstract class Bot {
     if (!agent) {
       logger.log(`[BOT] Creating agent (model: ${this.model}, scope: ${this.sessionScope}) for ${this.sessionScope === 'server' ? 'server' : 'channel'} ${sessionKey}`);
       const messenger = this.createMessenger(channelId);
-      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager, this.counter, sessionKey);
+      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager, this.counter, this.scheduler, sessionKey);
       this.sessions.set(sessionKey, agent);
     } else if (agent.messenger.channelId !== channelId) {
       // Update active channel for typing indicators and status
@@ -82,8 +88,22 @@ export abstract class Bot {
 
   abstract start(): Promise<void>;
 
+  /** Called by Scheduler when a cron job fires. */
+  private async onScheduleFire(entry: import('./scheduler.js').ScheduleEntry): Promise<void> {
+    logger.log(`[BOT] Schedule fired: "${entry.id}" → ch:${entry.channelId}`);
+    const agent = this.getOrCreateAgent(entry.channelId, entry.guildId);
+    const incoming = {
+      id: `schedule_${entry.id}_${Date.now()}`,
+      channelId: entry.channelId,
+      author: 'scheduler',
+      content: entry.prompt,
+    };
+    await agent.processMessage(incoming, [], []);
+  }
+
   async shutdown(): Promise<void> {
     logger.log('[BOT] Shutting down...');
+    this.scheduler.stop();
     for (const agent of this.sessions.values()) {
       agent.dispose();
     }

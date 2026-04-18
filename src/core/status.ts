@@ -12,6 +12,11 @@ export const STATUS_ICON: Record<string, string> = {
   delete_plugin:   '🗑️',
   read_plugin:     '📄',
   run_plugin:      '🚀',
+  // Schedule management
+  schedule_add:    '📅',
+  schedule_list:   '📋',
+  schedule_remove: '🗑️',
+  schedule_toggle: '⏯️',
   // Built-in: file operations
   view:           '📖',
   create:         '📝',

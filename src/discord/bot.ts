@@ -79,6 +79,32 @@ export class DiscordBot extends Bot {
                   { name: 'high', value: 'high' },
                   { name: 'xhigh', value: 'xhigh' },
                 ))),
+      new SlashCommandBuilder()
+        .setName('schedule')
+        .setDescription('Manage scheduled tasks')
+        .addSubcommand(sub =>
+          sub.setName('add')
+            .setDescription('Add a scheduled task')
+            .addStringOption(opt =>
+              opt.setName('cron').setDescription('Cron expression (e.g. "0 9 * * *")').setRequired(true))
+            .addChannelOption(opt =>
+              opt.setName('channel').setDescription('Target channel').setRequired(true))
+            .addStringOption(opt =>
+              opt.setName('prompt').setDescription('Message to send when triggered').setRequired(true))
+            .addStringOption(opt =>
+              opt.setName('description').setDescription('Description of this schedule').setRequired(false)))
+        .addSubcommand(sub =>
+          sub.setName('list').setDescription('List all scheduled tasks'))
+        .addSubcommand(sub =>
+          sub.setName('remove')
+            .setDescription('Remove a scheduled task')
+            .addStringOption(opt =>
+              opt.setName('id').setDescription('Schedule ID').setRequired(true)))
+        .addSubcommand(sub =>
+          sub.setName('toggle')
+            .setDescription('Enable/disable a scheduled task')
+            .addStringOption(opt =>
+              opt.setName('id').setDescription('Schedule ID').setRequired(true))),
     ];
 
     // Add prompt file commands
@@ -167,6 +193,53 @@ export class DiscordBot extends Bot {
         await agent.setModel(modelId, effort);
         const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
         await interaction.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
+      }
+      return;
+    }
+
+    if (interaction.commandName === 'schedule') {
+      const sub = interaction.options.getSubcommand();
+
+      if (sub === 'add') {
+        const cronExpr = interaction.options.getString('cron', true);
+        const channel = interaction.options.getChannel('channel', true);
+        const promptText = interaction.options.getString('prompt', true);
+        const description = interaction.options.getString('description') || undefined;
+
+        try {
+          const entry = this.scheduler.add({
+            cron: cronExpr,
+            channelId: channel.id,
+            guildId: interaction.guildId ?? undefined,
+            prompt: promptText,
+            description,
+          });
+          await interaction.reply(`✅ Schedule added: \`${entry.id}\`\nCron: \`${entry.cron}\` → <#${entry.channelId}>\nPrompt: ${entry.prompt.slice(0, 100)}`);
+        } catch (err) {
+          await interaction.reply(`❌ ${(err as Error).message}`);
+        }
+      } else if (sub === 'list') {
+        const entries = this.scheduler.list();
+        if (entries.length === 0) {
+          await interaction.reply('📋 No scheduled tasks');
+        } else {
+          const lines = entries.map(e =>
+            `${e.enabled ? '✅' : '⏸️'} \`${e.id}\` — \`${e.cron}\` → <#${e.channelId}>\n　${e.description || e.prompt.slice(0, 60)}`
+          );
+          await interaction.reply(`📋 **Scheduled Tasks (${entries.length})**\n${lines.join('\n')}`);
+        }
+      } else if (sub === 'remove') {
+        const id = interaction.options.getString('id', true);
+        const removed = this.scheduler.remove(id);
+        await interaction.reply(removed ? `✅ Removed schedule \`${id}\`` : `❌ Schedule \`${id}\` not found`);
+      } else if (sub === 'toggle') {
+        const id = interaction.options.getString('id', true);
+        const entry = this.scheduler.toggle(id);
+        if (entry) {
+          await interaction.reply(`${entry.enabled ? '✅ Enabled' : '⏸️ Disabled'} schedule \`${id}\``);
+        } else {
+          await interaction.reply(`❌ Schedule \`${id}\` not found`);
+        }
       }
       return;
     }
@@ -263,6 +336,7 @@ export class DiscordBot extends Bot {
     try {
       await this.clientManager.warmup();
       await this.discord.login(token);
+      this.scheduler.restore();
       logger.log('[BOT] Connected to Discord');
     } catch (error) {
       logger.error('[BOT] Failed to connect:', error);

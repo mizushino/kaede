@@ -11,6 +11,7 @@ import { loadPermissionConfig, createPermissionHandler, type PermissionConfig } 
 import { STATUS_ICON } from './status.js';
 import { logger } from './logger.js';
 import type { RequestCounter } from './counter.js';
+import type { Scheduler } from './scheduler.js';
 
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000; // 3 hour
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
@@ -25,6 +26,7 @@ export class Agent implements ToolContext {
   queue = new Inbox();
   readonly pluginLoader: PluginLoader;
   readonly counter: RequestCounter;
+  readonly scheduler: Scheduler;
   readonly sessionKey: string;
 
   private clientManager: CopilotClientManager;
@@ -34,7 +36,7 @@ export class Agent implements ToolContext {
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
 
-  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, sessionKey?: string) {
+  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
@@ -43,6 +45,7 @@ export class Agent implements ToolContext {
     this.permissionConfig = loadPermissionConfig();
     this.pluginLoader = new PluginLoader(pluginsDir);
     this.counter = counter;
+    this.scheduler = scheduler;
     this.sessionKey = sessionKey ?? messenger.channelId;
   }
 
@@ -81,6 +84,10 @@ The current channel ID is: ${channelId}
 
 You have a self-modifiable plugin system (plugins dir: ${this.pluginLoader.pluginsDir}).
 Tools: list_plugins, read_plugin, write_plugin, delete_plugin, run_plugin
+
+You can manage scheduled tasks (cron-based, timezone: Asia/Tokyo).
+Tools: schedule_add, schedule_list, schedule_remove, schedule_toggle
+When users ask to schedule something, convert their request to a cron expression and use schedule_add.
 
 IMPORTANT RULES:
 - ALWAYS use the send_message tool to send responses. Never output text directly without calling send_message.
@@ -170,6 +177,9 @@ IMPORTANT RULES:
       case 'run_plugin':      return ` | ${args.filename || ''}:${args.tool || ''}`;
       case 'send_message':   return args.content ? `\n${truncate(String(args.content), 300)}` : '';
       case 'get_messages':   return val('channelId');
+      case 'schedule_add':   return ` | ${args.cron || ''} → ${args.description || truncate(args.prompt || '', 60)}`;
+      case 'schedule_remove': return val('id');
+      case 'schedule_toggle': return val('id');
       default:               return Object.keys(args).length ? ` | ${truncate(JSON.stringify(args))}` : '';
     }
   }
