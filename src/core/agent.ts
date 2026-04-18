@@ -64,6 +64,8 @@ export class Agent implements ToolContext {
     const channelId = this.messenger.channelId;
     return {
       model: this.model,
+      workingDirectory: path.resolve(this.workspaceDir),
+      enableConfigDiscovery: true,
       ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
       onPermissionRequest: createPermissionHandler(this.messenger, this.permissionConfig),
       onUserInputRequest: async (request: { question: string; choices?: string[]; allowFreeform?: boolean }) => {
