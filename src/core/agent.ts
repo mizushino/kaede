@@ -221,12 +221,12 @@ IMPORTANT RULES:
 
         logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
 
+        this.counter.incrementSendAndWait(this.model);
         await session.sendAndWait({
           prompt,
           ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
         }, SESSION_TIMEOUT);
 
-        this.counter.incrementSendAndWait(this.model);
         this.currentSession = null;
         logger.log(`[${this.model}] Processing complete`);
         return;
