@@ -1,4 +1,5 @@
 import { CopilotSession } from '@github/copilot-sdk';
+import type { ElicitationContext, ElicitationResult, ElicitationFieldValue } from '@github/copilot-sdk';
 import path from 'path';
 
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
@@ -68,6 +69,63 @@ export class Agent implements ToolContext {
       enableConfigDiscovery: true,
       ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
       onPermissionRequest: createPermissionHandler(this.messenger, this.permissionConfig),
+      onElicitationRequest: async (context: ElicitationContext): Promise<ElicitationResult> => {
+        const { message, requestedSchema } = context;
+        const fields = requestedSchema?.properties ?? {};
+        const requiredFields = requestedSchema?.required ?? [];
+        const fieldNames = Object.keys(fields);
+
+        if (fieldNames.length === 0) {
+          // Simple confirmation
+          const confirmed = await this.messenger.requestApproval(message, Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000);
+          return { action: confirmed ? 'accept' : 'decline' };
+        }
+
+        const content: Record<string, ElicitationFieldValue> = {};
+        for (const fieldName of fieldNames) {
+          const field = fields[fieldName];
+          const title = field.title ?? fieldName;
+          const desc = field.description ? `\n${field.description}` : '';
+          const isRequired = requiredFields.includes(fieldName);
+          const reqLabel = isRequired ? ' (必須)' : ' (任意)';
+
+          if (field.type === 'boolean') {
+            const confirmed = await this.messenger.requestApproval(
+              `${message}\n\n**${title}**${reqLabel}${desc}`, Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000
+            );
+            content[fieldName] = confirmed;
+          } else if (field.type === 'string' && 'enum' in field && field.enum) {
+            const { answer } = await this.messenger.requestUserInput(
+              `${message}\n\n**${title}**${reqLabel}${desc}`,
+              field.enum, true
+            );
+            if (!answer && isRequired) return { action: 'cancel' };
+            content[fieldName] = answer || (field.default as string) || '';
+          } else if (field.type === 'string' && 'oneOf' in field && field.oneOf) {
+            const choices = field.oneOf.map((o: { const: string; title: string }) => o.title);
+            const { answer } = await this.messenger.requestUserInput(
+              `${message}\n\n**${title}**${reqLabel}${desc}`,
+              choices, true
+            );
+            if (!answer && isRequired) return { action: 'cancel' };
+            const selected = field.oneOf.find((o: { const: string; title: string }) => o.title === answer);
+            content[fieldName] = selected?.const ?? answer ?? (field.default as string) ?? '';
+          } else {
+            // string, number — freeform input
+            const { answer } = await this.messenger.requestUserInput(
+              `${message}\n\n**${title}**${reqLabel}${desc}`
+            );
+            if (!answer && isRequired) return { action: 'cancel' };
+            if (field.type === 'number' || field.type === 'integer') {
+              content[fieldName] = Number(answer) || 0;
+            } else {
+              content[fieldName] = answer || (field.default as string) || '';
+            }
+          }
+        }
+
+        return { action: 'accept', content };
+      },
       onUserInputRequest: async (request: { question: string; choices?: string[]; allowFreeform?: boolean }) => {
         const { answer, wasFreeform } = await this.messenger.requestUserInput(
           request.question,
