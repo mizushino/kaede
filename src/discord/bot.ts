@@ -174,12 +174,17 @@ export class DiscordBot extends Bot {
         try {
           const client = await this.clientManager.getClient();
           const models = await client.listModels();
-          const lines = models.map(m => {
-            const multiplier = m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?';
-            const reasoning = m.supportedReasoningEfforts?.join('/') ?? '-';
-            return `\`${m.id}\` — cost: ${multiplier} / reasoning: ${reasoning}`;
-          });
-          await interaction.editReply(`**Available models (${models.length}):**\n${lines.join('\n')}`);
+          const rows = models.map(m => ({
+            id: m.id,
+            cost: m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?',
+            reasoning: m.supportedReasoningEfforts?.join('/') ?? '-',
+          }));
+          const idWidth = Math.max(5, ...rows.map(r => r.id.length));
+          const costWidth = Math.max(4, ...rows.map(r => r.cost.length));
+          const header = `${'MODEL'.padEnd(idWidth)}  ${'COST'.padEnd(costWidth)}  REASONING`;
+          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(costWidth)}  ${'─'.repeat(13)}`;
+          const lines = rows.map(r => `${r.id.padEnd(idWidth)}  ${r.cost.padEnd(costWidth)}  ${r.reasoning}`);
+          await interaction.editReply(`**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``);
         } catch (err) {
           await interaction.editReply(`❌ Failed to list models: ${(err as Error).message}`);
         }
