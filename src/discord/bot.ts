@@ -74,7 +74,7 @@ export class DiscordBot extends Bot {
           sub.setName('set')
             .setDescription('Switch to a different model')
             .addStringOption(opt =>
-              opt.setName('model_id').setDescription('Model ID').setRequired(true))
+              opt.setName('model_id').setDescription('Model ID').setRequired(true).setAutocomplete(true))
             .addStringOption(opt =>
               opt.setName('effort')
                 .setDescription('Reasoning effort level')
@@ -166,6 +166,21 @@ export class DiscordBot extends Bot {
         .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
         .slice(0, 25);
       await interaction.respond(choices);
+    } else if (interaction.commandName === 'model') {
+      try {
+        const client = await this.clientManager.getClient();
+        const models = await client.listModels();
+        const choices = models
+          .map(m => ({
+            name: m.billing?.multiplier != null ? `${m.id} (${m.billing.multiplier}x)` : m.id,
+            value: m.id,
+          }))
+          .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
+          .slice(0, 25);
+        await interaction.respond(choices);
+      } catch {
+        await interaction.respond([]);
+      }
     } else if (interaction.commandName === 'schedule') {
       const { readFile } = await import('fs/promises');
       try {
