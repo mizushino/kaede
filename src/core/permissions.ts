@@ -7,6 +7,8 @@ export type PermissionKind = PermissionRequest['kind'];
 const ALL_KINDS: PermissionKind[] = ['shell', 'write', 'mcp', 'read', 'url', 'custom-tool'];
 
 export interface PermissionConfig {
+  /** When true, all permission kinds are auto-approved regardless of kind */
+  approveAll: boolean;
   /** Permission kinds that are automatically approved without user interaction */
   autoApprove: Set<PermissionKind>;
   /** Timeout in ms for waiting for user reaction (default: 120s) */
@@ -16,12 +18,13 @@ export interface PermissionConfig {
 export function loadPermissionConfig(): PermissionConfig {
   const raw = process.env.PERMISSION_AUTO_APPROVE;
 
+  let approveAll = false;
   let autoApprove: Set<PermissionKind>;
+
   if (raw === undefined || raw === '*' || raw === 'all') {
-    // Unset: approve everything (backward-compatible)
+    approveAll = true;
     autoApprove = new Set(ALL_KINDS);
   } else if (raw === '') {
-    // Explicitly empty: approve nothing (require approval for all)
     autoApprove = new Set();
   } else {
     const parsed = raw.split(',').map(s => s.trim()).filter(Boolean) as PermissionKind[];
@@ -30,7 +33,7 @@ export function loadPermissionConfig(): PermissionConfig {
 
   const approvalTimeoutMs = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 
-  return { autoApprove, approvalTimeoutMs };
+  return { approveAll, autoApprove, approvalTimeoutMs };
 }
 
 /** Build a human-readable description of a permission request */
@@ -86,8 +89,8 @@ export function createPermissionHandler(
   config: PermissionConfig,
 ): PermissionHandler {
   return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
-    // Auto-approve if this kind is in the allow list
-    if (config.autoApprove.has(request.kind)) {
+    // Auto-approve if wildcard or this kind is in the allow list
+    if (config.approveAll || config.autoApprove.has(request.kind)) {
       return { kind: 'approved' };
     }
 
