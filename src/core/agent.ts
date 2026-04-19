@@ -29,6 +29,7 @@ export class Agent implements ToolContext {
   readonly counter: RequestCounter;
   readonly scheduler: Scheduler;
   readonly sessionKey: string;
+  readonly botUserId: string;
 
   private clientManager: CopilotClientManager;
   private workspaceDir: string;
@@ -37,12 +38,13 @@ export class Agent implements ToolContext {
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
 
-  constructor(messenger: Messenger, workspaceDir: string, functionsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string) {
+  constructor(messenger: Messenger, workspaceDir: string, functionsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string, botUserId?: string) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
     this.reasoningEffort = REASONING_EFFORT;
     this.clientManager = clientManager;
+    this.botUserId = botUserId ?? '';
     this.permissionConfig = loadPermissionConfig();
     this.functionLoader = new FunctionLoader(functionsDir);
     this.counter = counter;
@@ -141,6 +143,7 @@ Your working directory is ${path.resolve(this.workspaceDir)}.
 Use the send_message tool to respond to users. Always respond in the same language as the user's message.
 You may reply to a specific message by including the messageId parameter.
 The current channel ID is: ${channelId}
+${this.botUserId ? `Your Discord user ID is: ${this.botUserId}` : ''}
 
 You have a self-modifiable function system (functions dir: ${this.functionLoader.functionsDir}).
 Tools: list_funcs, read_func, write_func, delete_func, run_func

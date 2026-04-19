@@ -67,7 +67,7 @@ export abstract class Bot {
     if (!agent) {
       logger.log(`[BOT] Creating agent (model: ${this.model}, scope: ${this.sessionScope}) for ${this.sessionScope === 'server' ? 'server' : 'channel'} ${sessionKey}`);
       const messenger = this.createMessenger(channelId);
-      agent = new Agent(messenger, this.workspaceDir, this.functionsDir, this.model, this.clientManager, this.counter, this.scheduler, sessionKey);
+      agent = new Agent(messenger, this.workspaceDir, this.functionsDir, this.model, this.clientManager, this.counter, this.scheduler, sessionKey, this.getBotId());
       this.sessions.set(sessionKey, agent);
     } else if (agent.messenger.channelId !== channelId) {
       // Update active channel for typing indicators and status
