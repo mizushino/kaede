@@ -409,8 +409,13 @@ export class DiscordBot extends Bot {
 
       // Fire-and-forget: agent responds via send_message tool.
       // Do NOT await processMessage — it blocks until the session ends (30+ min).
-      agent.processMessage(incoming, [], []).catch(err => {
+      agent.processMessage(incoming, [], []).catch(async err => {
         logger.error(`[BOT] Prompt execution error (${prompt.name}):`, err);
+        try {
+          await interaction.followUp(`❌ プロンプト \`${prompt.name}\` の実行中にエラーが発生しました: ${(err as Error).message}`);
+        } catch {
+          // followUp may fail if interaction expired
+        }
       });
       await interaction.editReply(`✅ プロンプト \`${prompt.name}\` を実行しました`);
       return;
