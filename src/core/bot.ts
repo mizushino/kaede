@@ -13,7 +13,7 @@ export type SessionScope = 'channel' | 'server';
 export abstract class Bot {
   protected readonly workspaceDir: string;
   protected readonly temporaryDir: string;
-  protected readonly pluginsDir: string;
+  protected readonly functionsDir: string;
   protected readonly model: string;
   protected readonly sessionScope: SessionScope;
   protected readonly clientManager = new CopilotClientManager();
@@ -25,7 +25,7 @@ export abstract class Bot {
   constructor() {
     this.workspaceDir = process.env.WORKSPACE_DIR || 'workspace';
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
-    this.pluginsDir = process.env.PLUGINS_DIR || path.join(this.workspaceDir, 'plugins');
+    this.functionsDir = process.env.FUNCTIONS_DIR || path.join(this.workspaceDir, 'functions');
     this.model = process.env.COPILOT_MODEL || '';
     this.sessionScope = (process.env.SESSION_SCOPE as SessionScope) || 'channel';
     this.counter = new RequestCounter(this.temporaryDir);
@@ -67,7 +67,7 @@ export abstract class Bot {
     if (!agent) {
       logger.log(`[BOT] Creating agent (model: ${this.model}, scope: ${this.sessionScope}) for ${this.sessionScope === 'server' ? 'server' : 'channel'} ${sessionKey}`);
       const messenger = this.createMessenger(channelId);
-      agent = new Agent(messenger, this.workspaceDir, this.pluginsDir, this.model, this.clientManager, this.counter, this.scheduler, sessionKey);
+      agent = new Agent(messenger, this.workspaceDir, this.functionsDir, this.model, this.clientManager, this.counter, this.scheduler, sessionKey);
       this.sessions.set(sessionKey, agent);
     } else if (agent.messenger.channelId !== channelId) {
       // Update active channel for typing indicators and status

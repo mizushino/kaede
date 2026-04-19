@@ -6,12 +6,12 @@ export const STATUS_ICON: Record<string, string> = {
   get_servers:    '🏠',
   check_message:  '👀',
   wait_messages:  '',
-  // Skill management
-  list_plugins:    '🧩',
-  write_plugin:    '✍️',
-  delete_plugin:   '🗑️',
-  read_plugin:     '📄',
-  run_plugin:      '🚀',
+  // Function management
+  list_funcs:   '🧩',
+  write_func:   '✍️',
+  delete_func:  '🗑️',
+  read_func:    '📄',
+  run_func:     '🚀',
   // Schedule management
   schedule_add:    '📅',
   schedule_list:   '📋',

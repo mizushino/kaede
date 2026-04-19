@@ -5,7 +5,7 @@ import path from 'path';
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 import { CopilotClientManager } from './client.js';
 import { createTools, ToolContext } from './tools.js';
-import { PluginLoader } from './plugins.js';
+import { FunctionLoader } from './functions.js';
 import { Inbox, QueuedMessage, IncomingMessage } from './inbox.js';
 import type { Messenger } from './messenger.js';
 import { loadPermissionConfig, createPermissionHandler, type PermissionConfig } from './permissions.js';
@@ -25,7 +25,7 @@ export class Agent implements ToolContext {
   reasoningEffort: ReasoningEffort | '';
   messenger: Messenger;
   queue = new Inbox();
-  readonly pluginLoader: PluginLoader;
+  readonly functionLoader: FunctionLoader;
   readonly counter: RequestCounter;
   readonly scheduler: Scheduler;
   readonly sessionKey: string;
@@ -37,14 +37,14 @@ export class Agent implements ToolContext {
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
 
-  constructor(messenger: Messenger, workspaceDir: string, pluginsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string) {
+  constructor(messenger: Messenger, workspaceDir: string, functionsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string) {
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
     this.reasoningEffort = REASONING_EFFORT;
     this.clientManager = clientManager;
     this.permissionConfig = loadPermissionConfig();
-    this.pluginLoader = new PluginLoader(pluginsDir);
+    this.functionLoader = new FunctionLoader(functionsDir);
     this.counter = counter;
     this.scheduler = scheduler;
     this.sessionKey = sessionKey ?? messenger.channelId;
@@ -134,7 +134,7 @@ export class Agent implements ToolContext {
         );
         return { answer, wasFreeform };
       },
-      tools: [...createTools(this), ...this.pluginLoader.createTools(this)],
+      tools: [...createTools(this), ...this.functionLoader.createTools(this)],
       systemMessage: {
         content: `You are a helpful AI assistant operating in a chat channel.
 Your working directory is ${path.resolve(this.workspaceDir)}.
@@ -142,8 +142,8 @@ Use the send_message tool to respond to users. Always respond in the same langua
 You may reply to a specific message by including the messageId parameter.
 The current channel ID is: ${channelId}
 
-You have a self-modifiable plugin system (plugins dir: ${this.pluginLoader.pluginsDir}).
-Tools: list_plugins, read_plugin, write_plugin, delete_plugin, run_plugin
+You have a self-modifiable function system (functions dir: ${this.functionLoader.functionsDir}).
+Tools: list_funcs, read_func, write_func, delete_func, run_func
 
 You can manage scheduled tasks (cron-based, timezone: Asia/Tokyo).
 Tools: schedule_add, schedule_list, schedule_remove, schedule_toggle
@@ -161,17 +161,17 @@ IMPORTANT RULES:
     const client = await this.clientManager.getClient();
     const sessionId = `session_${this.sessionKey}`;
 
-    // Load plugin tools (re-imported each session for hot-reload)
-    const pluginTools = await this.pluginLoader.loadTools(this);
+    // Load function tools (re-imported each session for hot-reload)
+    const fnTools = await this.functionLoader.loadTools(this);
     const config = this.buildSessionConfig();
-    config.tools = [...config.tools, ...pluginTools];
+    config.tools = [...config.tools, ...fnTools];
 
     // Try to resume an existing session first (preserves history across restarts)
     try {
       const session = await client.resumeSession(sessionId, config);
       this.setupEventHandlers(session);
       this.currentSession = session;
-      logger.log(`[${this.model}] Resumed existing session ${sessionId} (${pluginTools.length} plugin tool(s) loaded)`);
+      logger.log(`[${this.model}] Resumed existing session ${sessionId} (${fnTools.length} function tool(s) loaded)`);
       return session;
     } catch {
       // No existing session — create fresh
@@ -181,7 +181,7 @@ IMPORTANT RULES:
     const session = await client.createSession({ sessionId, ...config });
     this.setupEventHandlers(session);
     this.currentSession = session;
-    logger.log(`[${this.model}] Created session ${sessionId} (${pluginTools.length} plugin tool(s) loaded)`);
+    logger.log(`[${this.model}] Created session ${sessionId} (${fnTools.length} function tool(s) loaded)`);
     return session;
   }
 
@@ -189,9 +189,9 @@ IMPORTANT RULES:
     const client = await this.clientManager.getClient();
     const sessionId = `session_${this.sessionKey}`;
 
-    const pluginTools = await this.pluginLoader.loadTools(this);
+    const fnTools = await this.functionLoader.loadTools(this);
     const config = this.buildSessionConfig();
-    config.tools = [...config.tools, ...pluginTools];
+    config.tools = [...config.tools, ...fnTools];
 
     const session = await client.resumeSession(sessionId, config);
     this.setupEventHandlers(session);
@@ -231,10 +231,10 @@ IMPORTANT RULES:
       case 'glob':           return val('pattern');
       case 'grep':           return val('pattern');
       case 'web_fetch':      return val('url');
-      case 'write_plugin':    return val('filename');
-      case 'read_plugin':     return val('filename');
-      case 'delete_plugin':   return val('filename');
-      case 'run_plugin':      return ` | ${args.filename || ''}:${args.tool || ''}`;
+      case 'write_func':  return val('filename');
+      case 'read_func':   return val('filename');
+      case 'delete_func': return val('filename');
+      case 'run_func':    return ` | ${args.filename || ''}:${args.tool || ''}`;
       case 'send_message':   return args.content ? `\n${truncate(String(args.content), 300)}` : '';
       case 'get_messages':   return val('channelId');
       case 'schedule_add':   return ` | ${args.cron || ''} → ${args.description || truncate(args.prompt || '', 60)}`;

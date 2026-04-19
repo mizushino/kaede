@@ -164,7 +164,7 @@ src/
 │   ├── inbox.ts          # メッセージキュー（イベント駆動・タイムアウト）
 │   ├── messenger.ts      # メッセージング抽象クラス（プラットフォーム共通ロジック）
 │   ├── permissions.ts    # 権限管理（自動承認 / ユーザー確認）
-│   ├── plugins.ts         # プラグインローダー（動的インポート・CRUD・ホットリロード）
+│   ├── functions.ts       # 関数ローダー（動的インポート・CRUD・ホットリロード）
 │   ├── scheduler.ts      # cronスケジューラー（定期タスク管理・JSON永続化）
 │   ├── status.ts         # ステータスアイコンマップ（ツール名 → 絵文字）
 │   └── tools.ts          # コアツール定義（send_message, get_messages 等）
@@ -183,7 +183,7 @@ DiscordBot (discord/bot.ts)           ← Discord イベント受信
        └─ Agent (core/agent.ts)       ← Copilot セッション・リトライ
             ├─ Inbox (core/inbox.ts)   ← メッセージキュー
             ├─ Tools (core/tools.ts)   ← コアツール群
-            ├─ PluginLoader             ← プラグインの動的読み込み
+            ├─ FunctionLoader          ← 関数の動的読み込み
             └─ PermissionHandler       ← 操作の自動承認 / ユーザー確認
 
 Messenger (core/messenger.ts)         ← プラットフォーム抽象化
@@ -292,31 +292,31 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 
 自然言語で「毎朝9時にニュースをまとめて」と伝えると、AI がcron式に変換してスケジュール登録します。スケジュールは `workspace/schedules.json` に永続化され、再起動後も自動復元されます。
 
-### プラグイン管理ツール
+### 関数（Function）管理ツール
 
 | ツール | 説明 |
 |--------|------|
-| `list_plugins` | 🧩 インストール済みプラグインの一覧 |
-| `read_plugin` | 📄 プラグインファイルのソースコード表示 |
-| `write_plugin` | ✍️ プラグインの作成・更新（.ts/.js/.mjs） |
-| `delete_plugin` | 🗑️ プラグインの削除 |
-| `run_plugin` | 🚀 プラグイン内のツールを即時実行 |
+| `list_funcs` | 🧩 インストール済み関数の一覧 |
+| `read_func` | 📄 関数ファイルのソースコード表示 |
+| `write_func` | ✍️ 関数の作成・更新（.ts/.js/.mjs） |
+| `delete_func` | 🗑️ 関数の削除 |
+| `run_func` | 🚀 関数内のツールを即時実行 |
 
 ### Copilot SDK 組み込みツール
 
 Copilot SDK が提供するツール（`bash`, `view`, `create`, `edit`, `glob`, `grep`, `web_fetch` 等）も自動的に利用可能です。
 
-## 🧩 プラグインシステム
+## 🧩 関数（Function）システム
 
-AI が自らツールを作成・管理できるホットリロード対応のプラグインシステムです。プラグインファイルは `WORKSPACE_DIR/plugins/` に配置され、セッション開始時に動的にインポートされます。
+AI が自らツールを作成・管理できるホットリロード対応の関数システムです。関数ファイルは `WORKSPACE_DIR/functions/` に配置され、セッション開始時に動的にインポートされます。
 
-### プラグインファイルの形式
+### 関数ファイルの形式
 
 ```typescript
 import { z } from 'zod';
 
-export const name = 'my-plugin';
-export const description = 'プラグインの説明';
+export const name = 'my-function';
+export const description = '関数の説明';
 
 export function createTools(ctx: any) {
   return [
@@ -332,7 +332,7 @@ export function createTools(ctx: any) {
 }
 ```
 
-SDK への依存は不要で、`zod` のみ使用します。`write_plugin` で書き込んだプラグインは `run_plugin` で即時実行でき、次回セッションからは自動的に読み込まれます。
+SDK への依存は不要で、`zod` のみ使用します。`write_func` で書き込んだ関数は `run_func` で即時実行でき、次回セッションからは自動的に読み込まれます。
 
 ## 🔐 権限管理
 
