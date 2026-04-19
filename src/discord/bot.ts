@@ -6,6 +6,7 @@ import {
   Routes,
   SlashCommandBuilder,
   ChatInputCommandInteraction,
+  AutocompleteInteraction,
 } from 'discord.js';
 import path from 'path';
 import { Bot } from '../core/bot.js';
@@ -73,7 +74,7 @@ export class DiscordBot extends Bot {
           sub.setName('set')
             .setDescription('Switch to a different model')
             .addStringOption(opt =>
-              opt.setName('model_id').setDescription('Model ID').setRequired(true))
+              opt.setName('model_id').setDescription('Model ID').setRequired(true).setAutocomplete(true))
             .addStringOption(opt =>
               opt.setName('effort')
                 .setDescription('Reasoning effort level')
@@ -137,6 +138,23 @@ export class DiscordBot extends Bot {
     } catch (err) {
       logger.error('[BOT] Failed to register slash commands:');
       logger.error(err);
+    }
+  }
+
+  private async handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+    if (interaction.commandName === 'model' && interaction.options.getFocused(true).name === 'model_id') {
+      const focusedValue = interaction.options.getFocused().toLowerCase();
+      try {
+        const client = await this.clientManager.getClient();
+        const models = await client.listModels();
+        const choices = models
+          .filter(m => m.id.toLowerCase().includes(focusedValue))
+          .slice(0, 25)
+          .map(m => ({ name: m.id, value: m.id }));
+        await interaction.respond(choices);
+      } catch {
+        await interaction.respond([]);
+      }
     }
   }
 
@@ -295,6 +313,10 @@ export class DiscordBot extends Bot {
     });
 
     this.discord.on('interactionCreate', async (interaction) => {
+      if (interaction.isAutocomplete()) {
+        await this.handleAutocomplete(interaction as AutocompleteInteraction);
+        return;
+      }
       if (!interaction.isChatInputCommand()) return;
       await this.handleSlashCommand(interaction as ChatInputCommandInteraction);
     });
