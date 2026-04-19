@@ -39,6 +39,7 @@ export abstract class Bot {
   }
 
   protected abstract createMessenger(channelId: string): Messenger;
+  protected abstract getBotId(): string;
 
   protected isDuplicate(messageId: string): boolean {
     if (this.processedMessages.has(messageId)) return true;
@@ -96,7 +97,7 @@ export abstract class Bot {
       id: `schedule_${entry.id}_${Date.now()}`,
       channelId: entry.channelId,
       author: 'scheduler',
-      content: entry.prompt,
+      content: `<@${this.getBotId()}> ${entry.prompt}`,
     };
     await agent.processMessage(incoming, [], []);
   }

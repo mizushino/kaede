@@ -354,7 +354,7 @@ IMPORTANT RULES:
 
     return `${JSON.stringify(messageData)}${fileNote}
 
-Important: Use send_message to respond. You may reply to a specific message by including its messageId. Only respond to messages that are direct replies or mentions to you. Do not respond to any other messages.
+Important: Use send_message to respond. You may reply to a specific message by including its messageId. Only respond to messages directed at you based on context.
 send_message
 channelId: (use the channelId from the message you want to reply to)
 messageId: (Optional - use the ID of the message you want to reply to from the JSON above)`;

@@ -40,6 +40,10 @@ export class DiscordBot extends Bot {
     return new DiscordMessenger(this.discord, channelId);
   }
 
+  protected getBotId(): string {
+    return this.discord.user?.id ?? '';
+  }
+
   private async registerSlashCommands(): Promise<void> {
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token || !this.discord.user) return;
