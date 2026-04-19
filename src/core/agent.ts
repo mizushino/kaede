@@ -292,17 +292,19 @@ IMPORTANT RULES:
 
         logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
 
-        this.counter.incrementSendAndWait(this.model);
+        this.counter.startRequest(this.model, items.length);
         await session.sendAndWait({
           prompt,
           ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
         }, SESSION_TIMEOUT);
 
         this.currentSession = null;
+        this.counter.finalizeRequest();
         logger.log(`[${this.model}] Processing complete`);
         return;
       } catch (err) {
         this.currentSession = null;
+        this.counter.finalizeRequest();
         const msg = (err as Error).message || '';
         logger.log(`[${this.model}] Attempt ${attempt}/${MAX_RETRIES} failed: ${msg.slice(0, 120)}`);
 

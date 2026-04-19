@@ -82,7 +82,6 @@ export function createTools(ctx: ToolContext) {
       parameters: z.object({}),
       skipPermission: true,
       handler: async () => {
-        ctx.counter.incrementWaitMessages();
         ctx.messenger.stopTyping();
         ctx.messenger.clearStatus();
 
@@ -96,6 +95,7 @@ export function createTools(ctx: ToolContext) {
         ctx.messenger.setStatus('👀 check_message');
 
         const items = ctx.queue.drain();
+        ctx.counter.addReceived(items.length);
         logger.log(`[${ctx.model}] Checking messages (${items.length})`);
         return {
           messages: items.map(item => ({

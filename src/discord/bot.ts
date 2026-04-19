@@ -148,15 +148,40 @@ export class DiscordBot extends Bot {
     }
 
     if (interaction.commandName === 'stats') {
-      const counts = this.counter.getCounts();
-      const sawLines = Object.entries(counts.sendAndWait)
-        .map(([model, count]) => `  \`${model}\`: ${count}`)
-        .join('\n') || '  (none)';
+      // Daily stats (last 7 days)
+      const daily = this.counter.getDailyStats(7);
+      const maxDaily = Math.max(...daily.map(d => d.requests), 1);
+      const dailyLines = daily.length > 0
+        ? daily.map(d => {
+            const bar = '█'.repeat(Math.ceil(d.requests / maxDaily * 12));
+            const label = d.date.slice(5); // MM-DD
+            const modelDetail = Object.entries(d.models)
+              .map(([m, c]) => `${m}(${c})`)
+              .join(' ');
+            return `  \`${label}\` ${bar} ${d.requests}回 (↓${d.recv} ↑${d.sent}) [${modelDetail}]`;
+          }).join('\n')
+        : '  (データなし)';
+
+      // 30-day totals
+      const all = this.counter.getDailyStats(30);
+      const totalReq = all.reduce((s, d) => s + d.requests, 0);
+      const totalRecv = all.reduce((s, d) => s + d.recv, 0);
+      const totalSent = all.reduce((s, d) => s + d.sent, 0);
+      const modelTotals: Record<string, number> = {};
+      for (const d of all) {
+        for (const [m, c] of Object.entries(d.models)) {
+          modelTotals[m] = (modelTotals[m] || 0) + c;
+        }
+      }
+      const modelSummary = Object.entries(modelTotals)
+        .map(([m, c]) => `${m}(${c})`)
+        .join(' ') || 'none';
+
       await interaction.reply({
-        content: `📊 **Request Statistics**\n` +
-          `**sendAndWait** (per model):\n${sawLines}\n` +
-          `**wait_messages**: ${counts.waitMessages}\n` +
-          `**send_message**: ${counts.sendMessage}`,
+        content:
+          `📊 **リクエスト統計**\n\n` +
+          `📆 **直近7日間** (↓受信 ↑送信)\n${dailyLines}\n\n` +
+          `📋 **30日間合計:** ${totalReq}回 (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
         ephemeral: true,
       });
       return;
