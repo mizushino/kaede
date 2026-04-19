@@ -6,6 +6,7 @@ import {
   Routes,
   SlashCommandBuilder,
   ChatInputCommandInteraction,
+  AutocompleteInteraction,
 } from 'discord.js';
 import path from 'path';
 import { Bot } from '../core/bot.js';
@@ -103,12 +104,27 @@ export class DiscordBot extends Bot {
           sub.setName('remove')
             .setDescription('Remove a scheduled task')
             .addStringOption(opt =>
-              opt.setName('id').setDescription('Schedule ID').setRequired(true)))
+              opt.setName('id').setDescription('Schedule ID').setRequired(true).setAutocomplete(true)))
         .addSubcommand(sub =>
           sub.setName('toggle')
             .setDescription('Enable/disable a scheduled task')
             .addStringOption(opt =>
-              opt.setName('id').setDescription('Schedule ID').setRequired(true))),
+              opt.setName('id').setDescription('Schedule ID').setRequired(true).setAutocomplete(true))),
+      new SlashCommandBuilder()
+        .setName('function')
+        .setDescription('Manage custom functions')
+        .addSubcommand(sub =>
+          sub.setName('list').setDescription('List all installed functions'))
+        .addSubcommand(sub =>
+          sub.setName('info')
+            .setDescription('Show function source code')
+            .addStringOption(opt =>
+              opt.setName('name').setDescription('Function filename (e.g. weather.ts)').setRequired(true).setAutocomplete(true)))
+        .addSubcommand(sub =>
+          sub.setName('delete')
+            .setDescription('Delete a function')
+            .addStringOption(opt =>
+              opt.setName('name').setDescription('Function filename (e.g. weather.ts)').setRequired(true).setAutocomplete(true))),
     ];
 
     // Add prompt file commands
@@ -137,6 +153,34 @@ export class DiscordBot extends Bot {
     } catch (err) {
       logger.error('[BOT] Failed to register slash commands:');
       logger.error(err);
+    }
+  }
+
+  private async handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+    const focused = interaction.options.getFocused().toLowerCase();
+
+    if (interaction.commandName === 'function') {
+      const funcs = await this.listFunctionFiles();
+      const choices = funcs
+        .map(f => ({ name: f.name ? `${f.file} (${f.name})` : f.file, value: f.file }))
+        .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
+        .slice(0, 25);
+      await interaction.respond(choices);
+    } else if (interaction.commandName === 'schedule') {
+      const { readFile } = await import('fs/promises');
+      try {
+        const data = JSON.parse(await readFile(path.join(this.workspaceDir, 'schedules.json'), 'utf-8')) as { id: string; description?: string; cron?: string; enabled?: boolean }[];
+        const choices = data
+          .map(s => {
+            const label = s.description ? `${s.id} — ${s.description}` : s.id;
+            return { name: label.slice(0, 100), value: s.id };
+          })
+          .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
+          .slice(0, 25);
+        await interaction.respond(choices);
+      } catch {
+        await interaction.respond([]);
+      }
     }
   }
 
@@ -279,6 +323,52 @@ export class DiscordBot extends Bot {
       return;
     }
 
+    if (interaction.commandName === 'function') {
+      const sub = interaction.options.getSubcommand();
+
+      if (sub === 'list') {
+        const files = await this.listFunctionFiles();
+        if (files.length === 0) {
+          await interaction.reply({ content: '📦 **Functions**\n\nNo functions installed.', ephemeral: true });
+        } else {
+          const lines = files.map(f =>
+            `\`${f.file}\` — **${f.name || 'unnamed'}**\n　${f.description || '(no description)'}`
+          );
+          await interaction.reply({ content: `📦 **Functions (${files.length})**\n\n${lines.join('\n')}`, ephemeral: true });
+        }
+      } else if (sub === 'info') {
+        const name = interaction.options.getString('name', true);
+        const filename = await this.resolveFunctionFile(name);
+        if (!filename) {
+          await interaction.reply({ content: `❌ Function \`${name}\` not found`, ephemeral: true });
+        } else {
+          try {
+            const { readFile } = await import('fs/promises');
+            const content = await readFile(path.join(this.functionsDir, filename), 'utf-8');
+            const truncated = content.length > 1800 ? content.slice(0, 1800) + '\n... (truncated)' : content;
+            await interaction.reply({ content: `📄 **${filename}**\n\`\`\`ts\n${truncated}\n\`\`\``, ephemeral: true });
+          } catch {
+            await interaction.reply({ content: `❌ Function \`${name}\` not found`, ephemeral: true });
+          }
+        }
+      } else if (sub === 'delete') {
+        const name = interaction.options.getString('name', true);
+        const filename = await this.resolveFunctionFile(name);
+        if (!filename) {
+          await interaction.reply({ content: `❌ Function \`${name}\` not found`, ephemeral: true });
+        } else {
+          try {
+            const { unlink } = await import('fs/promises');
+            await unlink(path.join(this.functionsDir, filename));
+            await interaction.reply({ content: `✅ Deleted function \`${filename}\``, ephemeral: true });
+          } catch {
+            await interaction.reply({ content: `❌ Failed to delete \`${filename}\``, ephemeral: true });
+          }
+        }
+      }
+      return;
+    }
+
     // Check if this is a prompt command
     const prompt = this.promptLoader.getPrompt(interaction.commandName);
     if (prompt) {
@@ -320,6 +410,10 @@ export class DiscordBot extends Bot {
     });
 
     this.discord.on('interactionCreate', async (interaction) => {
+      if (interaction.isAutocomplete()) {
+        await this.handleAutocomplete(interaction);
+        return;
+      }
       if (!interaction.isChatInputCommand()) return;
       await this.handleSlashCommand(interaction as ChatInputCommandInteraction);
     });
@@ -359,6 +453,46 @@ export class DiscordBot extends Bot {
       };
       await agent.processMessage(incoming, imageAttachments, fileAttachments);
     });
+  }
+
+  private async listFunctionFiles(): Promise<{ file: string; name?: string; description?: string }[]> {
+    const { readdir, readFile } = await import('fs/promises');
+    try {
+      const entries = await readdir(this.functionsDir);
+      const files = entries.filter(f => /\.(ts|js|mjs)$/.test(f));
+      const result: { file: string; name?: string; description?: string }[] = [];
+      for (const file of files) {
+        const meta: typeof result[number] = { file };
+        try {
+          const src = await readFile(path.join(this.functionsDir, file), 'utf-8');
+          meta.name = src.match(/export\s+const\s+name\s*=\s*['"`]([^'"`]+)['"`]/)?.[1];
+          meta.description = src.match(/export\s+const\s+description\s*=\s*['"`]([^'"`]+)['"`]/)?.[1];
+        } catch { /* skip */ }
+        result.push(meta);
+      }
+      return result;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Resolve a function name (with or without extension) to an actual filename */
+  private async resolveFunctionFile(name: string): Promise<string | null> {
+    const safe = path.basename(name);
+    const { readdir } = await import('fs/promises');
+    try {
+      const entries = await readdir(this.functionsDir);
+      const files = entries.filter(f => /\.(ts|js|mjs)$/.test(f));
+      // Exact match first
+      if (files.includes(safe)) return safe;
+      // Try appending extensions
+      for (const ext of ['.ts', '.js', '.mjs']) {
+        if (files.includes(safe + ext)) return safe + ext;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   async start(): Promise<void> {
