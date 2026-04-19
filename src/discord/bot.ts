@@ -158,9 +158,9 @@ export class DiscordBot extends Bot {
             const modelDetail = Object.entries(d.models)
               .map(([m, c]) => `${m}(${c})`)
               .join(' ');
-            return `  \`${label}\` ${bar} ${d.requests}回 (↓${d.recv} ↑${d.sent}) [${modelDetail}]`;
+            return `  \`${label}\` ${bar} ${d.requests} req (↓${d.recv} ↑${d.sent}) [${modelDetail}]`;
           }).join('\n')
-        : '  (データなし)';
+        : '  (No data)';
 
       // 30-day totals
       const all = this.counter.getDailyStats(30);
@@ -179,9 +179,9 @@ export class DiscordBot extends Bot {
 
       await interaction.reply({
         content:
-          `📊 **リクエスト統計**\n\n` +
-          `📆 **直近7日間** (↓受信 ↑送信)\n${dailyLines}\n\n` +
-          `📋 **30日間合計:** ${totalReq}回 (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
+          `📊 **Request Statistics**\n\n` +
+          `📆 **Last 7 Days** (↓recv ↑sent)\n${dailyLines}\n\n` +
+          `📋 **30-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
         ephemeral: true,
       });
       return;
@@ -249,31 +249,31 @@ export class DiscordBot extends Bot {
             prompt: promptText,
             description,
           });
-          await interaction.reply(`✅ Schedule added: \`${entry.id}\`\nCron: \`${entry.cron}\` → <#${entry.channelId}>\nPrompt: ${entry.prompt.slice(0, 100)}`);
+          await interaction.reply({ content: `✅ Schedule added: \`${entry.id}\`\nCron: \`${entry.cron}\` → <#${entry.channelId}>\nPrompt: ${entry.prompt.slice(0, 100)}`, ephemeral: true });
         } catch (err) {
-          await interaction.reply(`❌ ${(err as Error).message}`);
+          await interaction.reply({ content: `❌ ${(err as Error).message}`, ephemeral: true });
         }
       } else if (sub === 'list') {
         const entries = this.scheduler.list();
         if (entries.length === 0) {
-          await interaction.reply('📋 No scheduled tasks');
+          await interaction.reply({ content: '📋 No scheduled tasks', ephemeral: true });
         } else {
           const lines = entries.map(e =>
             `${e.enabled ? '✅' : '⏸️'} \`${e.id}\` — \`${e.cron}\` → <#${e.channelId}>\n　${e.description || e.prompt.slice(0, 60)}`
           );
-          await interaction.reply(`📋 **Scheduled Tasks (${entries.length})**\n${lines.join('\n')}`);
+          await interaction.reply({ content: `📋 **Scheduled Tasks (${entries.length})**\n\n${lines.join('\n')}`, ephemeral: true });
         }
       } else if (sub === 'remove') {
         const id = interaction.options.getString('id', true);
         const removed = this.scheduler.remove(id);
-        await interaction.reply(removed ? `✅ Removed schedule \`${id}\`` : `❌ Schedule \`${id}\` not found`);
+        await interaction.reply({ content: removed ? `✅ Removed schedule \`${id}\`` : `❌ Schedule \`${id}\` not found`, ephemeral: true });
       } else if (sub === 'toggle') {
         const id = interaction.options.getString('id', true);
         const entry = this.scheduler.toggle(id);
         if (entry) {
-          await interaction.reply(`${entry.enabled ? '✅ Enabled' : '⏸️ Disabled'} schedule \`${id}\``);
+          await interaction.reply({ content: `${entry.enabled ? '✅ Enabled' : '⏸️ Disabled'} schedule \`${id}\``, ephemeral: true });
         } else {
-          await interaction.reply(`❌ Schedule \`${id}\` not found`);
+          await interaction.reply({ content: `❌ Schedule \`${id}\` not found`, ephemeral: true });
         }
       }
       return;
