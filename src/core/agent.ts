@@ -158,6 +158,12 @@ IMPORTANT RULES:
   }
 
   private async createFreshSession(): Promise<CopilotSession> {
+    // Disconnect previous session so it's cleanly persisted on disk for future resume
+    if (this.currentSession) {
+      try { await this.currentSession.disconnect(); } catch {}
+      this.currentSession = null;
+    }
+
     const client = await this.clientManager.getClient();
     const sessionId = `session_${this.sessionKey}`;
 
@@ -173,8 +179,8 @@ IMPORTANT RULES:
       this.currentSession = session;
       logger.log(`[${this.model}] Resumed existing session ${sessionId} (${fnTools.length} function tool(s) loaded)`);
       return session;
-    } catch {
-      // No existing session — create fresh
+    } catch (e) {
+      logger.log(`[${this.model}] Could not resume session ${sessionId}: ${(e as Error).message?.slice(0, 100) || 'unknown'}`);
     }
 
     try { await client.deleteSession(sessionId); } catch { /* may not exist */ }
@@ -298,12 +304,10 @@ IMPORTANT RULES:
           ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
         }, SESSION_TIMEOUT);
 
-        this.currentSession = null;
         this.counter.finalizeRequest();
         logger.log(`[${this.model}] Processing complete`);
         return;
       } catch (err) {
-        this.currentSession = null;
         this.counter.finalizeRequest();
         const msg = (err as Error).message || '';
         logger.log(`[${this.model}] Attempt ${attempt}/${MAX_RETRIES} failed: ${msg.slice(0, 120)}`);
@@ -364,14 +368,14 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 
   // --- Lifecycle ---
 
-  dispose(): void {
-    if (this.currentSession) {
-      this.currentSession.disconnect().catch(() => {});
-      this.currentSession = null;
-    }
+  async dispose(): Promise<void> {
     this.queue.abort();
     this.messenger.stopTyping();
     this.messenger.clearStatus();
+    if (this.currentSession) {
+      try { await this.currentSession.disconnect(); } catch {}
+      this.currentSession = null;
+    }
   }
 
   async deleteCliSession(): Promise<void> {

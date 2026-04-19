@@ -80,7 +80,7 @@ export abstract class Bot {
     const sessionKey = this.resolveSessionKey(channelId, guildId);
     const agent = this.sessions.get(sessionKey);
     if (agent) {
-      agent.dispose();
+      await agent.dispose();
       await agent.deleteCliSession();
       this.sessions.delete(sessionKey);
     }
@@ -105,9 +105,9 @@ export abstract class Bot {
   async shutdown(): Promise<void> {
     logger.log('[BOT] Shutting down...');
     this.scheduler.stop();
-    for (const agent of this.sessions.values()) {
-      agent.dispose();
-    }
+    await Promise.all(
+      [...this.sessions.values()].map(agent => agent.dispose())
+    );
     this.sessions.clear();
     this.counter.flush();
     await this.clientManager.shutdown();
