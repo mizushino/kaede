@@ -407,12 +407,12 @@ export class DiscordBot extends Bot {
         content: fullPrompt,
       };
 
-      try {
-        await agent.processMessage(incoming, [], []);
-        await interaction.editReply(`✅ Executed prompt: \`${prompt.name}\``);
-      } catch (err) {
-        await interaction.editReply(`❌ Failed to execute prompt: ${(err as Error).message}`);
-      }
+      // Fire-and-forget: agent responds via send_message tool.
+      // Do NOT await processMessage — it blocks until the session ends (30+ min).
+      agent.processMessage(incoming, [], []).catch(err => {
+        logger.error(`[BOT] Prompt execution error (${prompt.name}):`, err);
+      });
+      await interaction.editReply(`✅ プロンプト \`${prompt.name}\` を実行しました`);
       return;
     }
   }
