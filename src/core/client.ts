@@ -14,15 +14,20 @@ export class CopilotClientManager {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const opts: Record<string, unknown> = { logLevel: 'warning' };
+        const isByok = !!process.env.COPILOT_PROVIDER_BASE_URL;
         if (process.env.GITHUB_TOKEN) {
           opts.githubToken = process.env.GITHUB_TOKEN;
-        } else {
+        } else if (!isByok) {
           opts.useLoggedInUser = true;
         }
         const client = new CopilotClient(opts);
         await client.start();
         this.client = client;
-        logger.log('[CopilotClient] Started');
+        if (isByok) {
+          logger.log(`[CopilotClient] Started (BYOK: ${process.env.COPILOT_PROVIDER_TYPE})`);
+        } else {
+          logger.log('[CopilotClient] Started');
+        }
         return client;
       })();
     }

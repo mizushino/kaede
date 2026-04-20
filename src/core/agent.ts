@@ -63,12 +63,25 @@ export class Agent implements ToolContext {
     }
   }
 
+  private buildProviderConfig() {
+    const baseUrl = process.env.COPILOT_PROVIDER_BASE_URL;
+    if (!baseUrl) return undefined;
+    const type = (process.env.COPILOT_PROVIDER_TYPE as 'openai' | 'azure' | 'anthropic') || 'openai';
+    return {
+      type,
+      baseUrl,
+      ...(process.env.COPILOT_PROVIDER_API_KEY ? { apiKey: process.env.COPILOT_PROVIDER_API_KEY } : {}),
+    };
+  }
+
   private buildSessionConfig() {
     const channelId = this.messenger.channelId;
+    const provider = this.buildProviderConfig();
     return {
       model: this.model,
       workingDirectory: path.resolve(this.workspaceDir),
       enableConfigDiscovery: true,
+      ...(provider ? { provider } : {}),
       ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
       onPermissionRequest: createPermissionHandler(this.messenger, this.permissionConfig),
       onElicitationRequest: async (context: ElicitationContext): Promise<ElicitationResult> => {
