@@ -115,6 +115,37 @@ SESSION_SCOPE=server
 
 `server` モードでは、Bot はサーバー内のどのチャンネルからメッセージを受けても同一のセッション（会話履歴）を使用します。タイピング表示やステータスは、最後にメッセージを受信したチャンネルに表示されます。
 
+### 🔑 BYOK（Bring Your Own Key）
+
+GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, Azure OpenAI, Anthropic, Ollama など）を使用できます。
+
+`.env` に以下の環境変数を設定してください:
+
+| 環境変数 | 必須 | 説明 |
+|----------|------|------|
+| `COPILOT_PROVIDER_BASE_URL` | ✅ | モデルプロバイダーの API エンドポイント |
+| `COPILOT_MODEL` | ✅ | 使用するモデル識別子 |
+| `COPILOT_PROVIDER_TYPE` | - | プロバイダーの種類: `openai`（デフォルト）, `azure`, `anthropic` |
+| `COPILOT_PROVIDER_API_KEY` | - | プロバイダーの API キー（Ollama などローカルプロバイダーには不要） |
+
+**設定例（OpenAI）:**
+
+```sh
+COPILOT_PROVIDER_BASE_URL=https://api.openai.com/v1
+COPILOT_PROVIDER_TYPE=openai
+COPILOT_PROVIDER_API_KEY=sk-...
+COPILOT_MODEL=gpt-4o
+```
+
+**設定例（ローカル Ollama）:**
+
+```sh
+COPILOT_PROVIDER_BASE_URL=http://localhost:11434/v1
+COPILOT_MODEL=llama3
+```
+
+> **Note:** BYOK 使用時は `GITHUB_TOKEN` を設定しなくても動作します。`GITHUB_TOKEN` を設定した場合は GitHub 認証が優先されます。
+
 ### 🔄 PM2 によるプロセス管理
 
 [PM2](https://pm2.keymetrics.io/) を使うと、Bot をバックグラウンドで常駐させ、クラッシュ時の自動再起動やシステム起動時の自動起動が可能になります。
