@@ -55,8 +55,8 @@ export class DiscordBot extends Bot {
 
     const commands = [
       new SlashCommandBuilder()
-        .setName('reset')
-        .setDescription('Reset the current AI session'),
+        .setName('clear')
+        .setDescription('Clear the current AI session'),
       new SlashCommandBuilder()
         .setName('stats')
         .setDescription('Show request usage statistics'),
@@ -200,9 +200,9 @@ export class DiscordBot extends Bot {
   }
 
   private async handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
-    if (interaction.commandName === 'reset') {
-      await this.resetAgent(interaction.channelId, interaction.guildId ?? undefined);
-      await interaction.reply('🔄 Session reset');
+    if (interaction.commandName === 'clear') {
+      await this.clearAgent(interaction.channelId, interaction.guildId ?? undefined);
+      await interaction.reply('🔄 Session cleared');
       return;
     }
 

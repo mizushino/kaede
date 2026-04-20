@@ -76,7 +76,7 @@ export abstract class Bot {
     return agent;
   }
 
-  protected async resetAgent(channelId: string, guildId?: string): Promise<Agent | undefined> {
+  protected async clearAgent(channelId: string, guildId?: string): Promise<Agent | undefined> {
     const sessionKey = this.resolveSessionKey(channelId, guildId);
     const agent = this.sessions.get(sessionKey);
     if (agent) {
