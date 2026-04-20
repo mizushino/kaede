@@ -14,6 +14,7 @@ export abstract class Bot {
   protected readonly workspaceDir: string;
   protected readonly temporaryDir: string;
   protected readonly functionsDir: string;
+  protected readonly agentName: string;
   protected readonly model: string;
   protected readonly sessionScope: SessionScope;
   protected readonly clientManager = new CopilotClientManager();
@@ -26,6 +27,7 @@ export abstract class Bot {
     this.workspaceDir = process.env.WORKSPACE_DIR || 'workspace';
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
     this.functionsDir = process.env.FUNCTIONS_DIR || path.join(this.workspaceDir, 'functions');
+    this.agentName = process.env.AGENT_NAME || 'agent';
     this.model = process.env.COPILOT_MODEL || '';
     this.sessionScope = (process.env.SESSION_SCOPE as SessionScope) || 'channel';
     this.counter = new RequestCounter(this.temporaryDir);
@@ -35,6 +37,7 @@ export abstract class Bot {
     );
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
+    logger.log(`[BOT] Agent name: ${this.agentName}`);
     logger.log(`[BOT] Session scope: ${this.sessionScope}`);
   }
 
@@ -58,7 +61,8 @@ export abstract class Bot {
   }
 
   protected resolveSessionKey(channelId: string, guildId?: string): string {
-    return this.sessionScope === 'server' && guildId ? guildId : channelId;
+    const scopeId = this.sessionScope === 'server' && guildId ? guildId : channelId;
+    return `${this.agentName}_${scopeId}`;
   }
 
   protected getOrCreateAgent(channelId: string, guildId?: string): Agent {
