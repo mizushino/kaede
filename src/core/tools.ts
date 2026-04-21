@@ -6,12 +6,27 @@ import type { RequestCounter } from './counter.js';
 import type { Scheduler } from './scheduler.js';
 import { logger } from './logger.js';
 
+const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
+const WAIT_TIMEOUT_MARGIN = 5_000;
+
 export interface ToolContext {
   model: string;
   queue: Inbox;
   messenger: Messenger;
   counter: RequestCounter;
   scheduler: Scheduler;
+  getRemainingTurnTimeMs(): number | null;
+}
+
+function getEffectiveWaitTimeout(ctx: ToolContext): number {
+  const remainingTurnTime = ctx.getRemainingTurnTimeMs();
+  const turnLimitedTimeout = remainingTurnTime == null
+    ? WAIT_TIMEOUT
+    : remainingTurnTime > WAIT_TIMEOUT_MARGIN
+      ? remainingTurnTime - WAIT_TIMEOUT_MARGIN
+      : remainingTurnTime;
+
+  return Math.max(0, Math.min(WAIT_TIMEOUT, turnLimitedTimeout));
 }
 
 export function createTools(ctx: ToolContext) {
@@ -85,7 +100,7 @@ export function createTools(ctx: ToolContext) {
         ctx.messenger.stopTyping();
         ctx.messenger.clearStatus();
 
-        await ctx.queue.waitForMessage();
+        await ctx.queue.waitForMessage(getEffectiveWaitTimeout(ctx));
 
         if (ctx.queue.length === 0) {
           return { messages: [] };

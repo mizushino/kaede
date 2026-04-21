@@ -1,4 +1,4 @@
-const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
+const DEFAULT_WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
 
 export interface IncomingMessage {
   id: string;
@@ -37,15 +37,15 @@ export class Inbox {
     return drained;
   }
 
-  /** Block until a message arrives or WAIT_TIMEOUT elapses. */
-  async waitForMessage(): Promise<void> {
+  /** Block until a message arrives or the provided timeout elapses. */
+  async waitForMessage(timeoutMs = DEFAULT_WAIT_TIMEOUT): Promise<void> {
     if (this.aborted) return;
     if (this.items.length > 0) return;  // already have messages, no need to wait
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
         this.wakeResolve = null;
         resolve();
-      }, WAIT_TIMEOUT);
+      }, timeoutMs);
       this.wakeResolve = () => {
         clearTimeout(timer);
         this.wakeResolve = null;

@@ -37,6 +37,7 @@ export class Agent implements ToolContext {
   private processingPromise: Promise<void> | null = null;
   private currentSession: CopilotSession | null = null;
   private resumeOnNextMessage = false;
+  private activeTurnDeadlineMs: number | null = null;
 
   constructor(messenger: Messenger, workspaceDir: string, functionsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string, botUserId?: string) {
     this.messenger = messenger;
@@ -59,8 +60,33 @@ export class Agent implements ToolContext {
       // Disconnect without deleting — session history on disk is preserved for resumeSession()
       try { await this.currentSession.disconnect(); } catch { /* ignore */ }
       this.currentSession = null;
+      this.activeTurnDeadlineMs = null;
       this.resumeOnNextMessage = true;
     }
+  }
+
+  getRemainingTurnTimeMs(): number | null {
+    if (this.activeTurnDeadlineMs == null) return null;
+    return Math.max(0, this.activeTurnDeadlineMs - Date.now());
+  }
+
+  private getSessionId(): string {
+    return `session_${this.sessionKey}`;
+  }
+
+  private async discardSession(): Promise<void> {
+    const sessionId = this.getSessionId();
+
+    if (this.currentSession) {
+      try { await this.currentSession.disconnect(); } catch {}
+      this.currentSession = null;
+    }
+
+    this.activeTurnDeadlineMs = null;
+    this.resumeOnNextMessage = false;
+
+    const client = await this.clientManager.getClient();
+    try { await client.deleteSession(sessionId); } catch {}
   }
 
   private buildProviderConfig() {
@@ -181,7 +207,7 @@ IMPORTANT RULES:
     }
 
     const client = await this.clientManager.getClient();
-    const sessionId = `session_${this.sessionKey}`;
+    const sessionId = this.getSessionId();
 
     // Load function tools (re-imported each session for hot-reload)
     const fnTools = await this.functionLoader.loadTools(this);
@@ -209,7 +235,7 @@ IMPORTANT RULES:
 
   private async resumeSession(): Promise<CopilotSession> {
     const client = await this.clientManager.getClient();
-    const sessionId = `session_${this.sessionKey}`;
+    const sessionId = this.getSessionId();
 
     const fnTools = await this.functionLoader.loadTools(this);
     const config = this.buildSessionConfig();
@@ -315,10 +341,18 @@ IMPORTANT RULES:
         logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
 
         this.counter.startRequest(this.model, items.length);
-        await session.sendAndWait({
-          prompt,
-          ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
-        }, SESSION_TIMEOUT);
+        const turnDeadlineMs = Date.now() + SESSION_TIMEOUT;
+        this.activeTurnDeadlineMs = turnDeadlineMs;
+        try {
+          await session.sendAndWait({
+            prompt,
+            ...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+          }, SESSION_TIMEOUT);
+        } finally {
+          if (this.activeTurnDeadlineMs === turnDeadlineMs) {
+            this.activeTurnDeadlineMs = null;
+          }
+        }
 
         this.counter.finalizeRequest();
         logger.log(`[${this.model}] Processing complete`);
@@ -332,6 +366,15 @@ IMPORTANT RULES:
         if (msg.includes('Timeout') && msg.includes('session.idle')) {
           logger.log(`[${this.model}] Session expired after timeout, ending normally`);
           return;
+        }
+
+        if (msg.includes('No tool output found for function call')) {
+          logger.log(`[${this.model}] Discarding corrupted session after interrupted tool call`);
+          await this.discardSession();
+          if (attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, attempt * 2000));
+            continue;
+          }
         }
 
         // Reset client if connection-level error (only once per generation)
@@ -388,6 +431,7 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
     this.queue.abort();
     this.messenger.stopTyping();
     this.messenger.clearStatus();
+    this.activeTurnDeadlineMs = null;
     if (this.currentSession) {
       try { await this.currentSession.disconnect(); } catch {}
       this.currentSession = null;
@@ -396,7 +440,7 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 
   async deleteCliSession(): Promise<void> {
     const client = await this.clientManager.getClient();
-    const sessionId = `session_${this.sessionKey}`;
+    const sessionId = this.getSessionId();
     try { await client.deleteSession(sessionId); } catch { /* may not exist */ }
   }
 }
