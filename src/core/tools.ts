@@ -41,6 +41,32 @@ export function createTools(ctx: ToolContext) {
       }),
       skipPermission: true,
       handler: async ({ channelId, content, messageId, imagePath }) => {
+        if (ctx.queue.length > 0) {
+          const unsentMarker = [
+            '[UNSENT MESSAGE]',
+            'send_message was not delivered to Discord because newer queued messages were waiting.',
+            `channelId: ${channelId}`,
+            ...(messageId ? [`replyToMessageId: ${messageId}`] : []),
+            ...(imagePath ? [`imagePath: ${imagePath}`] : []),
+            `content: ${content ?? ''}`,
+          ].join('\n');
+
+          ctx.queue.pushFront({
+            message: {
+              id: `unsent-${Date.now()}`,
+              channelId,
+              author: ctx.model,
+              content: unsentMarker,
+            },
+            attachments: [],
+            files: [],
+          });
+
+          logger.log(`[${ctx.model}] Deferred send_message because ${ctx.queue.length - 1} newer message(s) were queued`);
+          ctx.messenger.stopTyping();
+          return { queued: true, reason: 'new_messages_waiting', pendingMessages: ctx.queue.length - 1 };
+        }
+
         try {
           const messagesSent = await ctx.messenger.sendMessage(channelId, content, messageId, imagePath);
           ctx.counter.incrementSendMessage();

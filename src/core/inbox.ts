@@ -30,6 +30,14 @@ export class Inbox {
     }
   }
 
+  /** Add a message to the front of the queue and wake any waiting consumer. */
+  pushFront(item: QueuedMessage): void {
+    this.items.unshift(item);
+    if (this.wakeResolve) {
+      this.wakeResolve();
+    }
+  }
+
   /** Remove and return all queued messages. */
   drain(): QueuedMessage[] {
     const drained = this.items;
