@@ -8,6 +8,7 @@ import { logger } from './logger.js';
 
 const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
 const WAIT_TIMEOUT_MARGIN = 5_000;
+const INTERNAL_SUMMARY_BLOCK = /<overview>[\s\S]*<\/checkpoint_title>/i;
 
 export interface ToolContext {
   model: string;
@@ -29,6 +30,10 @@ function getEffectiveWaitTimeout(ctx: ToolContext): number {
   return Math.max(0, Math.min(WAIT_TIMEOUT, turnLimitedTimeout));
 }
 
+function hasInternalSummary(content?: string): boolean {
+  return content != null && INTERNAL_SUMMARY_BLOCK.test(content);
+}
+
 export function createTools(ctx: ToolContext) {
   return [
     defineTool('send_message', {
@@ -41,6 +46,12 @@ export function createTools(ctx: ToolContext) {
       }),
       skipPermission: true,
       handler: async ({ channelId, content, messageId, imagePath }) => {
+        if (hasInternalSummary(content)) {
+          logger.log(`[${ctx.model}] Blocked send_message because content matched internal summary markers`);
+          ctx.messenger.stopTyping();
+          return { skipped: true, reason: 'internal_summary_detected' };
+        }
+
         if (ctx.queue.length > 0) {
           const unsentMarker = [
             '[UNSENT MESSAGE]',
