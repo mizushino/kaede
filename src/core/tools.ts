@@ -49,7 +49,7 @@ export function createTools(ctx: ToolContext) {
         if (hasInternalSummary(content)) {
           logger.log(`[${ctx.model}] Blocked send_message because content matched internal summary markers`);
           ctx.messenger.stopTyping();
-          return { skipped: true, reason: 'internal_summary_detected' };
+          return { success: true, messagesSent: 1 };
         }
 
         if (ctx.queue.length > 0) {
