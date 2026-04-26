@@ -10,6 +10,13 @@ const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
 const WAIT_TIMEOUT_MARGIN = 5_000;
 const INTERNAL_SUMMARY_BLOCK = /<overview>[\s\S]*<\/checkpoint_title>/i;
 
+function hasInternalSummary(content?: string): boolean {
+  if (!content) return false;
+  if (INTERNAL_SUMMARY_BLOCK.test(content)) return true;
+  if (/overview/i.test(content) && /checkpoint_title/i.test(content)) return true;
+  return false;
+}
+
 export interface ToolContext {
   model: string;
   queue: Inbox;
@@ -28,10 +35,6 @@ function getEffectiveWaitTimeout(ctx: ToolContext): number {
       : remainingTurnTime;
 
   return Math.max(0, Math.min(WAIT_TIMEOUT, turnLimitedTimeout));
-}
-
-function hasInternalSummary(content?: string): boolean {
-  return content != null && INTERNAL_SUMMARY_BLOCK.test(content);
 }
 
 export function createTools(ctx: ToolContext) {
