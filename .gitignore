@@ -4,7 +4,6 @@ dist/
 .env.*
 !.env.claude
 !.env.gpt
-ecosystem.config.cjs
 *.log
 .DS_Store
 coverage/
