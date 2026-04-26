@@ -20,6 +20,32 @@ const REASONING_EFFORT = (process.env.REASONING_EFFORT || '') as ReasoningEffort
 
 const truncate = (s: string, n = 120) => s.length > n ? s.slice(0, n) + '…' : s;
 
+function readPositiveIntegerEnv(primary: string, legacy?: string): number | undefined {
+  const raw = process.env[primary] ?? (legacy ? process.env[legacy] : undefined);
+  if (!raw) return undefined;
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    logger.log(`[Agent] Ignoring ${primary} because it must be a positive integer: ${raw}`);
+    return undefined;
+  }
+
+  return value;
+}
+
+function readThresholdEnv(primary: string, legacy?: string): number | undefined {
+  const raw = process.env[primary] ?? (legacy ? process.env[legacy] : undefined);
+  if (!raw) return undefined;
+
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    logger.log(`[Agent] Ignoring ${primary} because it must be a number between 0 and 1 inclusive: ${raw}`);
+    return undefined;
+  }
+
+  return value;
+}
+
 export class Agent implements ToolContext {
   model: string;
   reasoningEffort: ReasoningEffort | '';
@@ -103,12 +129,40 @@ export class Agent implements ToolContext {
   private buildSessionConfig() {
     const channelId = this.messenger.channelId;
     const provider = this.buildProviderConfig();
+
+    const maxContextWindowTokens = readPositiveIntegerEnv(
+      'COPILOT_MAX_CONTEXT_WINDOW_TOKENS',
+      'MAX_CONTEXT_WINDOW_TOKENS',
+    );
+    const bgCompactionThreshold = readThresholdEnv(
+      'COPILOT_BACKGROUND_COMPACTION_THRESHOLD',
+      'BG_COMPACTION_THRESHOLD',
+    );
+    const bufferExhaustionThreshold = readThresholdEnv(
+      'COPILOT_BUFFER_EXHAUSTION_THRESHOLD',
+      'BUFFER_EXHAUSTION_THRESHOLD',
+    );
+
+    const modelCapabilities = maxContextWindowTokens
+      ? { limits: { max_context_window_tokens: maxContextWindowTokens } }
+      : undefined;
+
+    const infiniteSessions =
+      bgCompactionThreshold !== undefined || bufferExhaustionThreshold !== undefined
+        ? {
+            ...(bgCompactionThreshold !== undefined ? { backgroundCompactionThreshold: bgCompactionThreshold } : {}),
+            ...(bufferExhaustionThreshold !== undefined ? { bufferExhaustionThreshold } : {}),
+          }
+        : undefined;
+
     return {
       model: this.model,
       workingDirectory: path.resolve(this.workspaceDir),
       enableConfigDiscovery: true,
       ...(provider ? { provider } : {}),
       ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
+      ...(modelCapabilities ? { modelCapabilities } : {}),
+      ...(infiniteSessions ? { infiniteSessions } : {}),
       onPermissionRequest: createPermissionHandler(this.messenger, this.permissionConfig),
       onElicitationRequest: async (context: ElicitationContext): Promise<ElicitationResult> => {
         const { message, requestedSchema } = context;

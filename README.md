@@ -127,6 +127,9 @@ GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, 
 | `COPILOT_MODEL` | ✅ | 使用するモデル識別子 |
 | `COPILOT_PROVIDER_TYPE` | - | プロバイダーの種類: `openai`（デフォルト）, `azure`, `anthropic` |
 | `COPILOT_PROVIDER_API_KEY` | - | プロバイダーの API キー（Ollama などローカルプロバイダーには不要） |
+| `COPILOT_MAX_CONTEXT_WINDOW_TOKENS` | - | オープンモデルなどでコンテキスト長を明示したい場合の上書き値 |
+| `COPILOT_BACKGROUND_COMPACTION_THRESHOLD` | - | バックグラウンド compaction を開始する使用率（0〜1） |
+| `COPILOT_BUFFER_EXHAUSTION_THRESHOLD` | - | compaction 完了待ちに入る使用率（0〜1） |
 
 **設定例（OpenAI）:**
 
@@ -143,6 +146,15 @@ COPILOT_MODEL=gpt-4o
 COPILOT_PROVIDER_BASE_URL=http://localhost:11434/v1
 COPILOT_MODEL=llama3
 ```
+
+**エージェントごとにコンテキスト長を明示したい場合（例: `.env.yotsuba`）:**
+
+```sh
+COPILOT_MODEL=Qwen3.6-27B
+COPILOT_MAX_CONTEXT_WINDOW_TOKENS=262144
+```
+
+未指定の場合は、SDK / ランタイム側の既定値を使用します。
 
 > **Note:** BYOK 使用時は `GITHUB_TOKEN` を設定しなくても動作します。`GITHUB_TOKEN` を設定した場合は GitHub 認証が優先されます。
 
