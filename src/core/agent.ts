@@ -133,15 +133,12 @@ export class Agent implements ToolContext {
 
     const maxContextWindowTokens = readPositiveIntegerEnv(
       'COPILOT_MAX_CONTEXT_WINDOW_TOKENS',
-      'MAX_CONTEXT_WINDOW_TOKENS',
     );
     const bgCompactionThreshold = readThresholdEnv(
       'COPILOT_BACKGROUND_COMPACTION_THRESHOLD',
-      'BG_COMPACTION_THRESHOLD',
     );
     const bufferExhaustionThreshold = readThresholdEnv(
       'COPILOT_BUFFER_EXHAUSTION_THRESHOLD',
-      'BUFFER_EXHAUSTION_THRESHOLD',
     );
 
     const modelCapabilities = maxContextWindowTokens
