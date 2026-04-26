@@ -1,8 +1,6 @@
 import { CopilotSession } from '@github/copilot-sdk';
 import type { ElicitationContext, ElicitationResult, ElicitationFieldValue } from '@github/copilot-sdk';
 import path from 'path';
-
-type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 import { CopilotClientManager } from './client.js';
 import { createTools, ToolContext } from './tools.js';
 import { FunctionLoader } from './functions.js';
@@ -14,9 +12,12 @@ import { logger } from './logger.js';
 import type { RequestCounter } from './counter.js';
 import type { Scheduler } from './scheduler.js';
 
+type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000; // 3 hour
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 const REASONING_EFFORT = (process.env.REASONING_EFFORT || '') as ReasoningEffort | '';
+const USER_RESPONSE_TIMEOUT = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 
 const truncate = (s: string, n = 120) => s.length > n ? s.slice(0, n) + '…' : s;
 
@@ -172,7 +173,7 @@ export class Agent implements ToolContext {
 
         if (fieldNames.length === 0) {
           // Simple confirmation
-          const confirmed = await this.messenger.requestApproval(message, Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000);
+          const confirmed = await this.messenger.requestApproval(message, USER_RESPONSE_TIMEOUT);
           return { action: confirmed ? 'accept' : 'decline' };
         }
 
@@ -186,7 +187,7 @@ export class Agent implements ToolContext {
 
           if (field.type === 'boolean') {
             const confirmed = await this.messenger.requestApproval(
-              `${message}\n\n**${title}**${reqLabel}${desc}`, Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000
+              `${message}\n\n**${title}**${reqLabel}${desc}`, USER_RESPONSE_TIMEOUT
             );
             content[fieldName] = confirmed;
           } else if (field.type === 'string' && 'enum' in field && field.enum) {
@@ -253,6 +254,13 @@ IMPORTANT RULES:
     };
   }
 
+  private async buildFullConfig() {
+    const fnTools = await this.functionLoader.loadTools(this);
+    const config = this.buildSessionConfig();
+    config.tools = [...config.tools, ...fnTools];
+    return { config, fnTools };
+  }
+
   private async createFreshSession(): Promise<CopilotSession> {
     // Disconnect previous session so it's cleanly persisted on disk for future resume
     if (this.currentSession) {
@@ -264,9 +272,7 @@ IMPORTANT RULES:
     const sessionId = this.getSessionId();
 
     // Load function tools (re-imported each session for hot-reload)
-    const fnTools = await this.functionLoader.loadTools(this);
-    const config = this.buildSessionConfig();
-    config.tools = [...config.tools, ...fnTools];
+    const { config, fnTools } = await this.buildFullConfig();
 
     // Try to resume an existing session first (preserves history across restarts)
     try {
@@ -291,9 +297,7 @@ IMPORTANT RULES:
     const client = await this.clientManager.getClient();
     const sessionId = this.getSessionId();
 
-    const fnTools = await this.functionLoader.loadTools(this);
-    const config = this.buildSessionConfig();
-    config.tools = [...config.tools, ...fnTools];
+    const { config, fnTools } = await this.buildFullConfig();
 
     const session = await client.resumeSession(sessionId, config);
     this.setupEventHandlers(session);
