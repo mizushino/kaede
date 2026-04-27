@@ -13,3 +13,4 @@ tmp/
 tmp-*/
 workspace/
 workspace-*/
+.serena/
