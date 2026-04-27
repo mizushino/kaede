@@ -4,7 +4,7 @@ import { logger } from './logger.js';
 
 export type PermissionKind = PermissionRequest['kind'];
 
-const ALL_KINDS: PermissionKind[] = ['shell', 'write', 'mcp', 'read', 'url', 'custom-tool'];
+const ALL_KINDS: PermissionKind[] = ['shell', 'write', 'mcp', 'read', 'url', 'memory', 'hook', 'custom-tool'];
 
 export interface PermissionConfig {
   /** When true, all permission kinds are auto-approved regardless of kind */
@@ -38,7 +38,7 @@ export function loadPermissionConfig(): PermissionConfig {
 
 /** Build a human-readable description of a permission request */
 function describeRequest(request: PermissionRequest): string {
-  const r = request as Record<string, unknown>;
+  const r = request as unknown as Record<string, unknown>;
   const detail = (keys: string[]) => {
     for (const k of keys) {
       if (r[k] !== undefined) return String(r[k]);
@@ -71,6 +71,14 @@ function describeRequest(request: PermissionRequest): string {
       const tool = detail(['toolName', 'tool', 'name']) ?? JSON.stringify(rest);
       return `🔧 MCP ツール呼び出し\nツール: \`${tool}\``;
     }
+    case 'memory': {
+      const p = detail(['path', 'file', 'filePath']) ?? JSON.stringify(rest);
+      return `🧠 メモリ書き込み\nパス: \`${p}\``;
+    }
+    case 'hook': {
+      const name = detail(['hookName', 'name']) ?? JSON.stringify(rest);
+      return `🪝 フック実行\n${name}`;
+    }
     case 'custom-tool': {
       const tool = detail(['toolName', 'tool', 'name']) ?? JSON.stringify(rest);
       return `⚙️ カスタムツール\nツール: \`${tool}\``;
@@ -91,7 +99,7 @@ export function createPermissionHandler(
   return async (request: PermissionRequest): Promise<PermissionRequestResult> => {
     // Auto-approve if wildcard or this kind is in the allow list
     if (config.approveAll || config.autoApprove.has(request.kind)) {
-      return { kind: 'approved' };
+      return { kind: 'approve-once' };
     }
 
     // Ask user for approval via platform (e.g. Discord reactions)
@@ -100,11 +108,11 @@ export function createPermissionHandler(
     try {
       const approved = await messenger.requestApproval(prompt, config.approvalTimeoutMs);
       if (approved) {
-        return { kind: 'approved' };
+        return { kind: 'approve-once' };
       }
-      return { kind: 'denied-interactively-by-user', feedback: 'User denied via reaction' };
+      return { kind: 'reject', feedback: 'User denied via reaction' };
     } catch {
-      return { kind: 'denied-interactively-by-user', feedback: 'Approval timed out' };
+      return { kind: 'reject', feedback: 'Approval timed out' };
     }
   };
 }

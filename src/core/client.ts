@@ -16,7 +16,7 @@ export class CopilotClientManager {
         const opts: Record<string, unknown> = { logLevel: 'warning' };
         const isByok = !!process.env.COPILOT_PROVIDER_BASE_URL;
         if (process.env.GITHUB_TOKEN) {
-          opts.githubToken = process.env.GITHUB_TOKEN;
+          opts.gitHubToken = process.env.GITHUB_TOKEN;
         } else if (!isByok) {
           opts.useLoggedInUser = true;
         }
