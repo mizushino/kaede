@@ -2,7 +2,6 @@ import {
   Client,
   GatewayIntentBits,
   Message,
-  MessageType,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -436,7 +435,7 @@ export class DiscordBot extends Bot {
 
     this.discord.on('messageCreate', async (message: Message) => {
       if (message.author.id === this.discord.user?.id) return;
-      if (message.type === MessageType.ThreadCreated) return;
+      if (message.system) return;
       if (!message.content && message.attachments.size === 0) return;
       if (this.isDuplicate(message.id)) return;
 
