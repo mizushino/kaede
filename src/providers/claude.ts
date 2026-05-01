@@ -231,13 +231,19 @@ export class ClaudeCodeProvider extends BaseProvider {
         continue;
       }
 
+      if (message.type === 'assistant') {
+        this.handleAssistantToolUses(message);
+        continue;
+      }
+
       if (message.type === 'tool_use_summary') {
         this.setDetectedStatus(message.summary);
         continue;
       }
 
       if (message.type === 'tool_progress') {
-        this.context.messenger.setStatus(this.formatToolStatus(this.normalizeToolName(message.tool_name)));
+        const normalized = this.normalizeToolName(message.tool_name);
+        this.context.messenger.setStatus(this.formatToolStatus(normalized));
         continue;
       }
 
@@ -692,6 +698,28 @@ export class ClaudeCodeProvider extends BaseProvider {
       properties: candidate.properties,
       required: Array.isArray(candidate.required) ? candidate.required : [],
     };
+  }
+
+  private handleAssistantToolUses(message: { message?: { content?: unknown } }): void {
+    const content = message.message?.content;
+    if (!Array.isArray(content)) return;
+
+    for (const block of content) {
+      if (!block || typeof block !== 'object') continue;
+      const b = block as { type?: string; name?: string; input?: Record<string, unknown> };
+      if (b.type !== 'tool_use' || typeof b.name !== 'string') continue;
+
+      const normalized = this.normalizeToolName(b.name);
+      const detail = this.formatToolDetail(normalized, b.input ?? {});
+      logger.log(`[${this.name}] tool: ${b.name}${detail ? ` | ${detail}` : ''}`);
+
+      if (normalized === 'send_message') {
+        this.sentDiscordMessage = true;
+        continue;
+      }
+
+      this.context.messenger.setStatus(this.formatToolStatus(normalized, detail || undefined));
+    }
   }
 
   private resolveEffort(options: ProviderOptions | undefined): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
