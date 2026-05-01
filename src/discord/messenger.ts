@@ -186,68 +186,64 @@ export class DiscordMessenger extends Messenger {
     }
 
     const msg = await channel.send(prompt);
-
     const botId = this.client.user?.id;
     const timeoutMs = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 
-    // Wait for reaction (choice) or message (freeform) concurrently
     return new Promise<{ answer: string; wasFreeform: boolean }>((resolve) => {
       let settled = false;
-      const cleanup = () => {
+      let timer: NodeJS.Timeout | null = null;
+      const reactionCollector = hasChoices
+        ? msg.createReactionCollector({
+            filter: (reaction, user) => {
+              if (user.id === botId) return false;
+              const idx = getChoiceIndexFromReaction(reaction);
+              return idx >= 0 && idx < choices.length;
+            },
+            max: 1,
+            time: timeoutMs,
+          })
+        : null;
+      const messageCollector = canFreeform
+        ? channel.createMessageCollector({
+            filter: (m: Message) => m.author.id !== botId,
+            max: 1,
+            time: timeoutMs,
+          })
+        : null;
+
+      const finalize = (result: { answer: string; wasFreeform: boolean }, displaySuffix: string) => {
+        if (settled) return;
         settled = true;
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
+        reactionCollector?.stop('settled');
+        messageCollector?.stop('settled');
+        void msg.reactions.removeAll().catch(() => {});
+        void msg.edit(prompt + displaySuffix).catch(() => {});
+        resolve(result);
       };
 
-      const timer = setTimeout(async () => {
-        if (settled) return;
-        cleanup();
-        await msg.reactions.removeAll().catch(() => {});
-        await msg.edit(prompt + '\n\n**→ ⏰ タイムアウト**').catch(() => {});
-        resolve({ answer: '', wasFreeform: true });
+      timer = setTimeout(() => {
+        finalize({ answer: '', wasFreeform: true }, '\n\n**→ ⏰ タイムアウト**');
       }, timeoutMs);
 
-      // Listen for reactions (choices)
-      if (hasChoices) {
-        const reactionFilter = (reaction: any, user: any) => {
-          if (user.id === botId) return false;
-          const choiceIndex = getChoiceIndexFromReaction(reaction);
-          return choiceIndex >= 0 && choiceIndex < choices.length;
-        };
-        msg.awaitReactions({ filter: reactionFilter, max: 1, time: timeoutMs, errors: ['time'] })
-          .then(async (collected) => {
-            if (settled) return;
-            cleanup();
-            const reaction = collected.first();
-            const idx = reaction ? getChoiceIndexFromReaction(reaction as any) : -1;
-            const answer = idx >= 0 && idx < choices.length ? choices[idx] : '';
-            await msg.reactions.removeAll().catch(() => {});
-            await msg.edit(prompt + `\n\n**→ ${answer}**`).catch(() => {});
-            resolve({ answer, wasFreeform: false });
-          })
-          .catch(() => {}); // timeout handled above
-      }
+      reactionCollector?.on('collect', (reaction) => {
+        const idx = getChoiceIndexFromReaction(reaction);
+        const answer = idx >= 0 && idx < choices!.length ? choices![idx] : '';
+        finalize({ answer, wasFreeform: false }, `\n\n**→ ${answer}**`);
+      });
 
-      // Listen for freeform text message
-      if (canFreeform) {
-        const messageFilter = (m: Message) => m.author.id !== botId;
-        channel.awaitMessages({ filter: messageFilter, max: 1, time: timeoutMs, errors: ['time'] })
-          .then(async (collected) => {
-            if (settled) return;
-            cleanup();
-            const rawAnswer = collected.first()?.content ?? '';
-            const choiceIndex = hasChoices ? getChoiceIndexFromMessage(rawAnswer) : -1;
-            const answer = choiceIndex >= 0 && choices && choiceIndex < choices.length ? choices[choiceIndex] : rawAnswer;
-            await msg.reactions.removeAll().catch(() => {});
-            await msg.edit(prompt + `\n\n**→ 💬 ${answer.slice(0, 100)}**`).catch(() => {});
-            resolve({ answer, wasFreeform: choiceIndex < 0 });
-          })
-          .catch(() => {}); // timeout handled above
-      }
+      messageCollector?.on('collect', (collected) => {
+        const rawAnswer = collected.content ?? '';
+        const choiceIndex = hasChoices ? getChoiceIndexFromMessage(rawAnswer) : -1;
+        const answer = choiceIndex >= 0 && choices && choiceIndex < choices.length ? choices[choiceIndex] : rawAnswer;
+        finalize({ answer, wasFreeform: choiceIndex < 0 }, `\n\n**→ 💬 ${answer.slice(0, 100)}**`);
+      });
 
       // Add reaction emojis after collectors are active.
       if (hasChoices) {
         void (async () => {
           for (let i = 0; i < Math.min(choices.length, NUMBER_EMOJIS.length); i++) {
+            if (settled) break;
             await msg.react(NUMBER_EMOJIS[i]).catch(() => {});
           }
         })();

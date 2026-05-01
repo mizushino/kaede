@@ -1,18 +1,16 @@
 import { CopilotClientManager } from '../core/client.js';
-import type { Agent } from '../core/bot.js';
 import { FunctionLoader } from '../core/functions.js';
-import { Inbox, QueuedMessage, IncomingMessage } from '../core/inbox.js';
+import { Inbox, QueuedMessage } from '../core/inbox.js';
 import type { Messenger } from '../core/messenger.js';
 import { loadPermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
 import { buildIncomingMessagePrompt } from '../core/prompt_helpers.js';
 import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
+import { BaseAgent } from './base_agent.js';
 import { CopilotCodeProvider, DEFAULT_REASONING_EFFORT, type CopilotSendErrorAction, type ReasoningEffort } from './copilot.js';
 
-const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
-
-export class CopilotAgent implements Agent {
+export class CopilotAgent extends BaseAgent {
 	model: string;
 	reasoningEffort: ReasoningEffort | '';
 	messenger: Messenger;
@@ -25,10 +23,10 @@ export class CopilotAgent implements Agent {
 
 	private readonly clientManager: CopilotClientManager;
 	private readonly workspaceDir: string;
-	private processingPromise: Promise<void> | null = null;
-	private readonly provider: CopilotCodeProvider;
+	protected readonly provider: CopilotCodeProvider;
 
 	constructor(messenger: Messenger, workspaceDir: string, functionsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string, botUserId?: string) {
+		super();
 		this.messenger = messenger;
 		this.workspaceDir = workspaceDir;
 		this.model = model;
@@ -61,92 +59,11 @@ export class CopilotAgent implements Agent {
 		});
 	}
 
-	async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
-		this.model = model;
-		if (reasoningEffort !== undefined) this.reasoningEffort = reasoningEffort;
-		await this.provider.setModel();
+	protected logTag(): string {
+		return this.model;
 	}
 
-	getRemainingTurnTimeMs(): number | null {
-		return this.provider.getRemainingTurnTimeMs();
-	}
-
-	async processMessage(message: IncomingMessage, attachments: string[], files: string[] = []): Promise<void> {
-		this.queue.push({ message, attachments, files });
-		logger.log(`[${this.model}] Queued message (${this.queue.length} pending) [ch:${this.messenger.channelId}]`);
-
-		if (this.processingPromise) return;
-
-		this.processingPromise = this.runProcessingLoop();
-		await this.processingPromise;
-	}
-
-	private async runProcessingLoop(): Promise<void> {
-		try {
-			while (true) {
-				const items = this.queue.drain();
-				if (items.length === 0) break;
-
-				await this.messenger.startTyping();
-				this.messenger.setStatus('👀 check_message');
-
-				logger.log(`[${this.model}] Processing ${items.length} message(s)`);
-				await this.sendMessages(items);
-			}
-		} catch (err) {
-			logger.error(`[${this.model}] Processing error:`, err);
-		} finally {
-			this.processingPromise = null;
-			this.messenger.stopTyping();
-			this.messenger.clearStatus();
-			this.messenger.setIdle();
-		}
-	}
-
-	private async sendMessages(items: QueuedMessage[]): Promise<void> {
-		for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-			try {
-				const prompt = this.buildPrompt(items);
-				const attachments = items.flatMap(item => item.attachments);
-
-				logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
-
-				this.counter.startRequest(this.model, items.length);
-				try {
-					await this.provider.sendPrompt(prompt, { attachments });
-				} finally {
-					this.counter.finalizeRequest();
-				}
-
-				logger.log(`[${this.model}] Processing complete`);
-				return;
-			} catch (err) {
-				const msg = (err as Error).message || '';
-				logger.log(`[${this.model}] Attempt ${attempt}/${MAX_RETRIES} failed: ${msg.slice(0, 120)}`);
-				const action = await this.provider.handleSendError(err as Error);
-				if (action === 'stop') return;
-				if (this.shouldRetry(action, attempt)) {
-					await new Promise(r => setTimeout(r, attempt * 2000));
-					continue;
-				}
-				if (action === 'connection') {
-					logger.error(`[${this.model}] Connection failed after ${MAX_RETRIES} retries, message dropped`);
-					return;
-				}
-
-				logger.error(`[${this.model}] Error:`, err);
-				await this.messenger.sendError(msg);
-				return;
-			}
-		}
-	}
-
-	private shouldRetry(action: CopilotSendErrorAction, attempt: number): boolean {
-		if (attempt >= MAX_RETRIES) return false;
-		return action === 'retry' || action === 'connection';
-	}
-
-	private buildPrompt(items: QueuedMessage[]): string {
+	protected buildPrompt(items: QueuedMessage[]): string {
 		return buildIncomingMessagePrompt(items, {
 			suffix: `Important: Use send_message to respond. You may reply to a specific message by including its messageId. Only respond to messages directed at you based on context.
 send_message
@@ -155,13 +72,41 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 		});
 	}
 
-	async dispose(): Promise<void> {
-		this.queue.abort();
-		this.messenger.dispose();
-		this.provider.dispose();
+	protected async attemptSend(items: QueuedMessage[], attempt: number): Promise<'done' | 'retry' | 'fatal'> {
+		try {
+			const prompt = this.buildPrompt(items);
+			const attachments = items.flatMap(item => item.attachments);
+
+			logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
+
+			this.counter.startRequest(this.model, items.length);
+			try {
+				await this.provider.sendPrompt(prompt, { attachments });
+			} finally {
+				this.counter.finalizeRequest();
+			}
+
+			logger.log(`[${this.model}] Processing complete`);
+			return 'done';
+		} catch (err) {
+			const msg = (err as Error).message || '';
+			logger.log(`[${this.model}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);
+			const action = await this.provider.handleSendError(err as Error);
+			if (action === 'stop') return 'fatal';
+			if (this.shouldRetry(action, attempt)) return 'retry';
+			if (action === 'connection') {
+				logger.error(`[${this.model}] Connection failed after ${this.maxRetries} retries, message dropped`);
+				return 'fatal';
+			}
+
+			logger.error(`[${this.model}] Error:`, err);
+			await this.messenger.sendError(msg);
+			return 'fatal';
+		}
 	}
 
-	async deleteSession(): Promise<void> {
-		await this.provider.deleteSession();
+	private shouldRetry(action: CopilotSendErrorAction, attempt: number): boolean {
+		if (attempt >= this.maxRetries) return false;
+		return action === 'retry' || action === 'connection';
 	}
 }

@@ -1,22 +1,21 @@
 import path from 'path';
 import type { Messenger } from '../core/messenger.js';
-import { Inbox, QueuedMessage, IncomingMessage } from '../core/inbox.js';
+import { Inbox, QueuedMessage } from '../core/inbox.js';
 import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
-import type { Agent } from '../core/bot.js';
 import { getClaudeDiscordPromptSignatures } from '../core/tool_contract.js';
 import { buildDeferredReplyMarker, consumeDeferredReplies, writePendingQueueSnapshot } from '../core/queue_state.js';
 import { buildIncomingMessagePrompt } from '../core/prompt_helpers.js';
 import { ClaudeCodeProvider } from './claude.js';
 import { BaseProvider } from './provider.js';
+import { BaseAgent } from './base_agent.js';
 import { logger } from '../core/logger.js';
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
-const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 const PROVIDER_NAME = 'claude';
 
-export class ClaudeAgent implements Agent {
+export class ClaudeAgent extends BaseAgent {
   model: string;
   reasoningEffort: ReasoningEffort | '' = '';
   messenger: Messenger;
@@ -27,8 +26,7 @@ export class ClaudeAgent implements Agent {
   readonly botUserId: string;
 
   private workspaceDir: string;
-  private processingPromise: Promise<void> | null = null;
-  private provider: BaseProvider;
+  protected provider: BaseProvider;
 
   constructor(
     messenger: Messenger,
@@ -39,6 +37,7 @@ export class ClaudeAgent implements Agent {
     sessionKey?: string,
     botUserId?: string,
   ) {
+    super();
     this.messenger = messenger;
     this.workspaceDir = workspaceDir;
     this.model = model;
@@ -49,98 +48,19 @@ export class ClaudeAgent implements Agent {
     this.provider = this.createProvider();
   }
 
-  async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
-    this.model = model;
-    if (reasoningEffort !== undefined) this.reasoningEffort = reasoningEffort;
-    await this.provider.setModel();
-  }
-
   sendToTerminal(text: string): void {
     this.provider.sendToTerminal(text);
   }
 
-  getRemainingTurnTimeMs(): number | null {
-    return this.provider.getRemainingTurnTimeMs();
+  protected logTag(): string {
+    return `${PROVIDER_NAME}:${this.model || 'default'}`;
   }
 
-  async processMessage(message: IncomingMessage, attachments: string[], files: string[] = []): Promise<void> {
-    this.queue.push({ message, attachments, files });
+  protected async beforeIteration(): Promise<void> {
     await this.syncPendingQueueSnapshot();
-    logger.log(`[${PROVIDER_NAME}:${this.model || 'default'}] Queued message (${this.queue.length} pending) [ch:${this.messenger.channelId}]`);
-
-    if (this.processingPromise) return;
-
-    this.processingPromise = this.runProcessingLoop();
-    await this.processingPromise;
   }
 
-  private async runProcessingLoop(): Promise<void> {
-    try {
-      while (true) {
-        const items = this.queue.drain();
-        await this.syncPendingQueueSnapshot();
-        if (items.length === 0) break;
-
-        await this.messenger.startTyping();
-        this.messenger.setStatus('👀 check_message');
-
-        logger.log(`[${PROVIDER_NAME}:${this.model || 'default'}] Processing ${items.length} message(s)`);
-        await this.sendMessages(items);
-      }
-    } catch (err) {
-      logger.error(`[${PROVIDER_NAME}:${this.model || 'default'}] Processing error:`, err);
-    } finally {
-      this.processingPromise = null;
-      this.messenger.stopTyping();
-      this.messenger.clearStatus();
-      this.messenger.setIdle();
-    }
-  }
-
-  private async sendMessages(items: QueuedMessage[]): Promise<void> {
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const prompt = this.buildPrompt(items);
-        logger.log(`[${PROVIDER_NAME}:${this.model || 'default'}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
-
-        this.counter.startRequest(`${PROVIDER_NAME}:${this.model || 'default'}`, items.length);
-        try {
-          await this.provider.sendPrompt(prompt, {
-            model: this.model || undefined,
-            reasoningEffort: this.reasoningEffort || undefined,
-          });
-          await this.restoreDeferredReplies();
-        } finally {
-          this.counter.finalizeRequest();
-        }
-
-        logger.log(`[${PROVIDER_NAME}:${this.model || 'default'}] Prompt completed`);
-        return;
-      } catch (err) {
-        const msg = (err as Error).message || '';
-        logger.log(`[${PROVIDER_NAME}:${this.model || 'default'}] Attempt ${attempt}/${MAX_RETRIES} failed: ${msg.slice(0, 120)}`);
-
-        this.provider.dispose();
-        this.provider = this.createProvider();
-
-        if (msg.includes('authentication failed')) {
-          logger.error(`[${PROVIDER_NAME}:${this.model || 'default'}] Error:`, err);
-          await this.messenger.sendError(msg);
-          return;
-        }
-
-        if (attempt < MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, attempt * 2_000));
-          continue;
-        }
-
-        logger.error(`[${PROVIDER_NAME}:${this.model || 'default'}] Error:`, err);
-        await this.messenger.sendError(msg);
-      }
-    }
-  }
-
-  private buildPrompt(items: QueuedMessage[]): string {
+  protected buildPrompt(items: QueuedMessage[]): string {
     return buildIncomingMessagePrompt(items, {
       includeAttachments: true,
       fileNoteTemplate: '\n\nAttached files (read them from disk if needed): {files}',
@@ -156,6 +76,46 @@ Do not use the built-in AskUserQuestion tool. In this bot environment, interacti
 If send_message reports queued/new_messages_waiting, treat the current reply as stale and do not force it out.
 When replying, use the channelId from the message and include messageId when replying to a specific message.`,
     });
+  }
+
+  protected async attemptSend(items: QueuedMessage[], attempt: number): Promise<'done' | 'retry' | 'fatal'> {
+    const tag = this.logTag();
+    try {
+      const prompt = this.buildPrompt(items);
+      logger.log(`[${tag}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
+
+      this.counter.startRequest(tag, items.length);
+      try {
+        await this.provider.sendPrompt(prompt, {
+          model: this.model || undefined,
+          reasoningEffort: this.reasoningEffort || undefined,
+        });
+        await this.restoreDeferredReplies();
+      } finally {
+        this.counter.finalizeRequest();
+      }
+
+      logger.log(`[${tag}] Prompt completed`);
+      return 'done';
+    } catch (err) {
+      const msg = (err as Error).message || '';
+      logger.log(`[${tag}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);
+
+      this.provider.dispose();
+      this.provider = this.createProvider();
+
+      if (msg.includes('authentication failed')) {
+        logger.error(`[${tag}] Error:`, err);
+        await this.messenger.sendError(msg);
+        return 'fatal';
+      }
+
+      if (attempt < this.maxRetries) return 'retry';
+
+      logger.error(`[${tag}] Error:`, err);
+      await this.messenger.sendError(msg);
+      return 'fatal';
+    }
   }
 
   async dispose(): Promise<void> {
@@ -184,7 +144,7 @@ When replying, use the channelId from the message and include messageId when rep
         })),
       );
     } catch (err) {
-      logger.error(`[${PROVIDER_NAME}:${this.model || 'default'}] Failed to sync pending queue snapshot:`, err);
+      logger.error(`[${this.logTag()}] Failed to sync pending queue snapshot:`, err);
     }
   }
 
@@ -210,9 +170,9 @@ When replying, use the channelId from the message and include messageId when rep
       }
 
       await this.syncPendingQueueSnapshot();
-      logger.log(`[${PROVIDER_NAME}:${this.model || 'default'}] Re-queued ${deferredReplies.length} deferred reply draft(s)`);
+      logger.log(`[${this.logTag()}] Re-queued ${deferredReplies.length} deferred reply draft(s)`);
     } catch (err) {
-      logger.error(`[${PROVIDER_NAME}:${this.model || 'default'}] Failed to restore deferred replies:`, err);
+      logger.error(`[${this.logTag()}] Failed to restore deferred replies:`, err);
     }
   }
 

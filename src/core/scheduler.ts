@@ -37,18 +37,49 @@ export class Scheduler {
 
   private reloadFromDisk(): void {
     try {
-      this.stop();
-      this.entries.clear();
-      if (!fs.existsSync(this.filePath)) return;
+      if (!fs.existsSync(this.filePath)) {
+        this.applyEntries([]);
+        return;
+      }
 
       const data = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as ScheduleEntry[];
-      for (const entry of data) {
-        this.entries.set(entry.id, entry);
-        if (entry.enabled) this.startTask(entry);
-      }
+      this.applyEntries(data);
       logger.log(`[Scheduler] Restored ${data.length} schedule(s) (${this.tasks.size} active)`);
     } catch (err) {
       logger.error('[Scheduler] Failed to restore schedules:', err);
+    }
+  }
+
+  /**
+   * Apply a desired set of entries with minimal disruption: only restart cron
+   * tasks whose definition actually changed. Removed entries are stopped, new
+   * ones are started, and unchanged ones keep running uninterrupted.
+   */
+  private applyEntries(desired: ScheduleEntry[]): void {
+    const desiredById = new Map(desired.map(e => [e.id, e]));
+
+    for (const id of [...this.entries.keys()]) {
+      if (!desiredById.has(id)) {
+        this.stopTask(id);
+        this.entries.delete(id);
+      }
+    }
+
+    for (const entry of desired) {
+      const previous = this.entries.get(entry.id);
+      const taskDirty = !previous
+        || previous.cron !== entry.cron
+        || previous.enabled !== entry.enabled;
+
+      this.entries.set(entry.id, entry);
+
+      if (!taskDirty) continue;
+
+      if (entry.enabled) {
+        this.startTask(entry);
+      } else {
+        this.stopTask(entry.id);
+      }
     }
   }
 
