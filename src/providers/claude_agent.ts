@@ -3,6 +3,7 @@ import type { Messenger } from '../core/messenger.js';
 import { Inbox, QueuedMessage, IncomingMessage } from '../core/inbox.js';
 import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
+import type { Agent } from '../core/bot.js';
 import { getClaudeDiscordPromptSignatures } from '../core/tool_contract.js';
 import { buildDeferredReplyMarker, consumeDeferredReplies, writePendingQueueSnapshot } from '../core/queue_state.js';
 import { ClaudeCodeProvider } from './claude.js';
@@ -13,9 +14,8 @@ export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 const PROVIDER_NAME = 'claude';
-const RUNTIME_LABEL = 'Claude Agent SDK';
 
-export class ClaudeAgent {
+export class ClaudeAgent implements Agent {
   model: string;
   reasoningEffort: ReasoningEffort | '' = '';
   messenger: Messenger;
@@ -53,10 +53,6 @@ export class ClaudeAgent {
     if (reasoningEffort !== undefined) this.reasoningEffort = reasoningEffort;
     this.provider.dispose();
     this.provider = this.createProvider();
-  }
-
-  getRemainingTurnTimeMs(): number | null {
-    return null;
   }
 
   sendToTerminal(text: string): void {
@@ -105,7 +101,10 @@ export class ClaudeAgent {
 
         this.counter.startRequest(`${PROVIDER_NAME}:${this.model || 'default'}`, items.length);
         try {
-          await this.provider.sendPrompt(prompt, { model: this.model || undefined });
+          await this.provider.sendPrompt(prompt, {
+            model: this.model || undefined,
+            reasoningEffort: this.reasoningEffort || undefined,
+          });
           await this.restoreDeferredReplies();
         } finally {
           this.counter.finalizeRequest();
@@ -155,7 +154,7 @@ export class ClaudeAgent {
 
     return `${JSON.stringify(messageData)}${fileNote}
 
-You are an AI agent running inside ${RUNTIME_LABEL}.
+You are an AI agent running inside ${this.provider.getRuntimeLabel()}.
 Your working directory is ${path.resolve(this.workspaceDir)}.
 Always respond in the same language as the user's message.
 Only respond to messages directed at you based on context.

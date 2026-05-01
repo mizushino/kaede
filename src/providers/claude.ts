@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import path from 'path';
-import { deleteSession, getSessionInfo, query, type Options, type PermissionMode, type PermissionResult, type Query } from '@anthropic-ai/claude-agent-sdk';
+import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { BaseProvider } from './provider.js';
 import type { ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
@@ -25,6 +25,39 @@ type JsonSchemaShape = {
 
 export class ClaudeCodeProvider extends BaseProvider {
   readonly name = 'claude';
+
+  static async listModels(options: { workspaceDir?: string; claudeCommand?: string } = {}): Promise<ModelInfo[]> {
+    const cwd = path.resolve(options.workspaceDir || process.cwd());
+    const claudeCommand = options.claudeCommand || process.env.CLAUDE_COMMAND;
+    const abortController = new AbortController();
+
+    // Streaming-input mode (empty async iterable) lets us use control requests
+    // like supportedModels() without sending an actual user prompt.
+    const stream = query({
+      prompt: (async function* () {
+        // Wait until aborted so we can issue the control request and bail out.
+        await new Promise<void>(resolve => {
+          abortController.signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+      })(),
+      options: {
+        abortController,
+        cwd,
+        env: { ...process.env } as Record<string, string>,
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        ...(claudeCommand ? { pathToClaudeCodeExecutable: claudeCommand } : {}),
+      },
+    });
+
+    try {
+      const models = await stream.supportedModels();
+      return models;
+    } finally {
+      abortController.abort();
+      stream.close();
+    }
+  }
 
   private activeQuery?: Query;
   private activeAbortController?: AbortController;
@@ -234,6 +267,7 @@ export class ClaudeCodeProvider extends BaseProvider {
       cwd: workspaceDir,
       env,
       model: modelOverride,
+      ...(this.resolveEffort(options) ? { effort: this.resolveEffort(options) } : {}),
       permissionMode,
       ...(permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       ...(claudeCommand ? { pathToClaudeCodeExecutable: claudeCommand } : {}),
@@ -623,6 +657,12 @@ export class ClaudeCodeProvider extends BaseProvider {
       properties: candidate.properties,
       required: Array.isArray(candidate.required) ? candidate.required : [],
     };
+  }
+
+  private resolveEffort(options: ProviderOptions | undefined): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
+    const raw = (options?.reasoningEffort || process.env.REASONING_EFFORT || '').trim().toLowerCase();
+    if (raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'xhigh') return raw;
+    return undefined;
   }
 
   private stringDefault(value: unknown): string {

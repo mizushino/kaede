@@ -9,6 +9,7 @@ import {
   AutocompleteInteraction,
 } from 'discord.js';
 import path from 'path';
+import { ClaudeCodeProvider } from '../providers/claude.js';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
@@ -388,18 +389,28 @@ export class DiscordBot extends Bot {
     }
   }
 
-  private getConfiguredClaudeModels(): string[] {
-    return [process.env.CLAUDE_MODEL]
-      .filter((value): value is string => Boolean(value));
+  private async getClaudeSdkModels(): Promise<Array<{ id: string; displayName: string; effort: string }>> {
+    const models = await ClaudeCodeProvider.listModels({ workspaceDir: process.env.WORKSPACE_DIR });
+    return models.map(m => ({
+      id: m.value,
+      displayName: m.displayName,
+      effort: m.supportsEffort && m.supportedEffortLevels?.length ? m.supportedEffortLevels.join('/') : '-',
+    }));
   }
 
   private async getModelAutocompleteChoices(focused: string): Promise<Array<{ name: string; value: string }>> {
     switch (this.providerType) {
       case 'claude':
-        return this.getConfiguredClaudeModels()
-          .filter(model => model.toLowerCase().includes(focused))
-          .slice(0, 25)
-          .map(model => ({ name: model, value: model }));
+        try {
+          const models = await this.getClaudeSdkModels();
+          return models
+            .map(m => ({ name: `${m.id} — ${m.displayName}`.slice(0, 100), value: m.id }))
+            .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
+            .slice(0, 25);
+        } catch (err) {
+          logger.error('[BOT] Failed to list Claude models:', err);
+          return [];
+        }
       case 'copilot':
         try {
           const client = await this.clientManager.getClient();
@@ -420,9 +431,20 @@ export class DiscordBot extends Bot {
   private async buildModelListReply(): Promise<string> {
     switch (this.providerType) {
       case 'claude': {
-        const models = this.getConfiguredClaudeModels();
-        const configured = models.length > 0 ? models.join('\n') : '(CLI default model)';
-        return `**Current provider:** ${this.providerType}\n**Configured model(s):**\n\`\`\`\n${configured}\n\`\`\``;
+        try {
+          const models = await this.getClaudeSdkModels();
+          if (models.length === 0) {
+            return `**Current provider:** ${this.providerType}\n(No models reported by Claude Agent SDK)`;
+          }
+          const idWidth = Math.max(5, ...models.map(m => m.id.length));
+          const nameWidth = Math.max(4, ...models.map(m => m.displayName.length));
+          const header = `${'MODEL'.padEnd(idWidth)}  ${'NAME'.padEnd(nameWidth)}  EFFORT`;
+          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(nameWidth)}  ${'─'.repeat(6)}`;
+          const lines = models.map(m => `${m.id.padEnd(idWidth)}  ${m.displayName.padEnd(nameWidth)}  ${m.effort}`);
+          return `**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
+        } catch (err) {
+          return `❌ Failed to list Claude models: ${(err as Error).message}`;
+        }
       }
       case 'copilot': {
         try {

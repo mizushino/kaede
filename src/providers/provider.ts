@@ -7,6 +7,7 @@ const STATUS_MAX_LENGTH = 88;
 export interface ProviderOptions {
   model?: string;
   attachments?: string[];
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | '';
 }
 
 export interface ProviderContext {
@@ -27,6 +28,10 @@ export abstract class BaseProvider {
 
   protected getDisplayName(): string {
     return this.name;
+  }
+
+  getRuntimeLabel(): string {
+    return this.getDisplayName();
   }
 
   protected formatToolStatus(toolName: string, detail?: string): string {
