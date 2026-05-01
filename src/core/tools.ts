@@ -9,13 +9,10 @@ import { buildDeferredReplyMarker } from './queue_state.js';
 
 const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
 const WAIT_TIMEOUT_MARGIN = 5_000;
-const INTERNAL_SUMMARY_BLOCK = /<overview>[\s\S]*<\/checkpoint_title>/i;
 
 function hasInternalSummary(content?: string): boolean {
   if (!content) return false;
-  if (INTERNAL_SUMMARY_BLOCK.test(content)) return true;
-  if (/overview/i.test(content) && /checkpoint_title/i.test(content)) return true;
-  return false;
+  return /overview/i.test(content) && /checkpoint[_\s]title/i.test(content);
 }
 
 export interface ToolContext {
