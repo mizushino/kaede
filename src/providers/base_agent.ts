@@ -56,13 +56,14 @@ export abstract class BaseAgent implements Agent {
     await this.beforeIteration();
     logger.log(`[${this.logTag()}] Queued message (${this.queue.length} pending) [ch:${this.messenger.channelId}]`);
 
-    if (this.processingPromise) return;
-
-    this.processingPromise = this.runProcessingLoop();
+    if (!this.processingPromise) {
+      this.processingPromise = this.runProcessingLoop();
+    }
     await this.processingPromise;
   }
 
   protected async runProcessingLoop(): Promise<void> {
+    let loopError: unknown;
     try {
       while (true) {
         const items = this.queue.drain();
@@ -76,14 +77,17 @@ export abstract class BaseAgent implements Agent {
         await this.sendMessages(items);
       }
     } catch (err) {
+      loopError = err;
       logger.error(`[${this.logTag()}] Processing error:`, err);
       await this.afterIterationError(err);
+      await this.messenger.sendError((err as Error).message || String(err)).catch(() => {});
     } finally {
       this.processingPromise = null;
       this.messenger.stopTyping();
       this.messenger.clearStatus();
       this.messenger.setIdle();
     }
+    if (loopError) throw loopError;
   }
 
   protected async sendMessages(items: QueuedMessage[]): Promise<void> {

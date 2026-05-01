@@ -352,15 +352,34 @@ class KaedeMcpServer {
 
     return new Promise<Record<string, unknown>>((resolve) => {
       let settled = false;
-      const cleanup = () => {
-        settled = true;
-        clearTimeout(timer);
-      };
+      let timer: NodeJS.Timeout | null = null;
 
-      const finalize = async (summary: string, payload: Record<string, unknown>) => {
-        cleanup();
-        await promptMessage.reactions.removeAll().catch(() => {});
-        await promptMessage.edit(`${prompt}\n\n**→ ${summary}**`).catch(() => {});
+      const reactionCollector = (hasChoices && !question.multiSelect)
+        ? promptMessage.createReactionCollector({
+            filter: (reaction, user) => {
+              if (user.id === botId) return false;
+              const idx = this.getChoiceIndexFromReaction(reaction);
+              return idx >= 0 && idx < options.length;
+            },
+            max: 1,
+            time: USER_RESPONSE_TIMEOUT_MS,
+          })
+        : null;
+
+      const messageCollector = channel.createMessageCollector({
+        filter: (m: Message) => m.author.id !== botId,
+        max: 1,
+        time: USER_RESPONSE_TIMEOUT_MS,
+      });
+
+      const finalize = (summary: string, payload: Record<string, unknown>) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        reactionCollector?.stop('settled');
+        messageCollector.stop('settled');
+        void promptMessage.reactions.removeAll().catch(() => {});
+        void promptMessage.edit(`${prompt}\n\n**→ ${summary}**`).catch(() => {});
         resolve({
           header: question.header,
           question: question.question,
@@ -368,9 +387,8 @@ class KaedeMcpServer {
         });
       };
 
-      const timer = setTimeout(async () => {
-        if (settled) return;
-        await finalize('⏰ タイムアウト', {
+      timer = setTimeout(() => {
+        finalize('⏰ タイムアウト', {
           answer: '',
           answers: [],
           wasFreeform: true,
@@ -378,57 +396,42 @@ class KaedeMcpServer {
         });
       }, USER_RESPONSE_TIMEOUT_MS);
 
-      if (hasChoices && !question.multiSelect) {
-        const reactionFilter = (reaction: Message['reactions']['cache'] extends infer _ ? any : any, user: any) => {
-          if (user.id === botId) return false;
-          const choiceIndex = this.getChoiceIndexFromReaction(reaction);
-          return choiceIndex >= 0 && choiceIndex < options.length;
-        };
+      reactionCollector?.on('collect', (reaction) => {
+        const index = this.getChoiceIndexFromReaction(reaction);
+        const answer = index >= 0 && index < options.length ? options[index].label : '';
+        finalize(answer || '未選択', {
+          answer,
+          answers: answer ? [answer] : [],
+          wasFreeform: false,
+        });
+      });
 
-        promptMessage.awaitReactions({ filter: reactionFilter, max: 1, time: USER_RESPONSE_TIMEOUT_MS, errors: ['time'] })
-          .then(async collected => {
-            if (settled) return;
-            const reaction = collected.first();
-            const index = reaction ? this.getChoiceIndexFromReaction(reaction as any) : -1;
-            const answer = index >= 0 && index < options.length ? options[index].label : '';
-            await finalize(answer || '未選択', {
-              answer,
-              answers: answer ? [answer] : [],
-              wasFreeform: false,
-            });
-          })
-          .catch(() => {});
-      }
+      messageCollector.on('collect', (collected) => {
+        const rawAnswer = collected.content ?? '';
 
-      const messageFilter = (message: Message) => message.author.id !== botId;
-      channel.awaitMessages({ filter: messageFilter, max: 1, time: USER_RESPONSE_TIMEOUT_MS, errors: ['time'] })
-        .then(async collected => {
-          if (settled) return;
-          const rawAnswer = collected.first()?.content ?? '';
-
-          if (question.multiSelect) {
-            const answers = this.parseMultiSelectAnswer(rawAnswer, options.map(option => option.label));
-            await finalize(`💬 ${answers.join(', ').slice(0, 120) || rawAnswer.slice(0, 120)}`, {
-              answer: rawAnswer,
-              answers,
-              wasFreeform: answers.length === 0,
-            });
-            return;
-          }
-
-          const choiceIndex = hasChoices ? this.getChoiceIndexFromMessage(rawAnswer) : -1;
-          const answer = choiceIndex >= 0 && choiceIndex < options.length ? options[choiceIndex].label : rawAnswer;
-          await finalize(`💬 ${answer.slice(0, 120)}`, {
-            answer,
-            answers: answer ? [answer] : [],
-            wasFreeform: choiceIndex < 0,
+        if (question.multiSelect) {
+          const answers = this.parseMultiSelectAnswer(rawAnswer, options.map(option => option.label));
+          finalize(`💬 ${answers.join(', ').slice(0, 120) || rawAnswer.slice(0, 120)}`, {
+            answer: rawAnswer,
+            answers,
+            wasFreeform: answers.length === 0,
           });
-        })
-        .catch(() => {});
+          return;
+        }
+
+        const choiceIndex = hasChoices ? this.getChoiceIndexFromMessage(rawAnswer) : -1;
+        const answer = choiceIndex >= 0 && choiceIndex < options.length ? options[choiceIndex].label : rawAnswer;
+        finalize(`💬 ${answer.slice(0, 120)}`, {
+          answer,
+          answers: answer ? [answer] : [],
+          wasFreeform: choiceIndex < 0,
+        });
+      });
 
       if (hasChoices && !question.multiSelect) {
         void (async () => {
           for (let index = 0; index < Math.min(options.length, NUMBER_EMOJIS.length); index++) {
+            if (settled) break;
             await promptMessage.react(NUMBER_EMOJIS[index]).catch(() => {});
           }
         })();

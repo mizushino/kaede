@@ -518,7 +518,9 @@ export class DiscordBot extends Bot {
         author: message.author.username,
         content: message.content,
       };
-      await agent.processMessage(incoming, imageAttachments, fileAttachments);
+      await agent.processMessage(incoming, imageAttachments, fileAttachments).catch(err => {
+        logger.error('[BOT] processMessage failed:', err);
+      });
     });
   }
 

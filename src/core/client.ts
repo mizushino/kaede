@@ -5,12 +5,16 @@ export class CopilotClientManager {
   private client: CopilotClient | null = null;
   private clientPromise: Promise<CopilotClient> | null = null;
   private _generation = 0;
+  private shuttingDown = false;
 
   get generation(): number {
     return this._generation;
   }
 
   async getClient(): Promise<CopilotClient> {
+    if (this.shuttingDown) {
+      throw new Error('CopilotClientManager is shutting down');
+    }
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const opts: Record<string, unknown> = { logLevel: 'warning' };
@@ -22,6 +26,10 @@ export class CopilotClientManager {
         }
         const client = new CopilotClient(opts);
         await client.start();
+        if (this.shuttingDown) {
+          await client.stop().catch(() => {});
+          throw new Error('CopilotClientManager is shutting down');
+        }
         this.client = client;
         if (isByok) {
           logger.log(`[CopilotClient] Started (BYOK: ${process.env.COPILOT_PROVIDER_TYPE})`);
@@ -53,18 +61,24 @@ export class CopilotClientManager {
   }
 
   async shutdown(): Promise<void> {
-    if (this.client) {
-      const client = this.client;
-      this.client = null;
-      this.clientPromise = null;
-      try {
-        await Promise.race([
-          client.stop(),
-          new Promise(r => setTimeout(r, 3_000)),
-        ]);
-      } catch (err) {
-        logger.error('[CopilotClient] Stop error:', err);
-      }
+    this.shuttingDown = true;
+    const pending = this.clientPromise;
+    this.client = null;
+    this.clientPromise = null;
+
+    let client: CopilotClient | null = null;
+    if (pending) {
+      client = await pending.catch(() => null);
+    }
+    if (!client) return;
+
+    try {
+      await Promise.race([
+        client.stop(),
+        new Promise(r => setTimeout(r, 3_000)),
+      ]);
+    } catch (err) {
+      logger.error('[CopilotClient] Stop error:', err);
     }
   }
 }

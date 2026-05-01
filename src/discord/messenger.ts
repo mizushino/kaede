@@ -119,32 +119,38 @@ export class DiscordMessenger extends Messenger {
 
     const botId = this.client.user?.id;
 
-    try {
-      const collected = await msg.awaitReactions({
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const collector = msg.createReactionCollector({
         filter: (reaction, user) => {
           if (user.id === botId) return false;
           return reaction.emoji.name === '✅' || reaction.emoji.name === '❌';
         },
         max: 1,
         time: timeoutMs,
-        errors: ['time'],
       });
 
-      const reaction = collected.first();
-      const approved = reaction?.emoji.name === '✅';
+      const finalize = (approved: boolean, suffix: string) => {
+        if (settled) return;
+        settled = true;
+        collector.stop('settled');
+        void msg.reactions.removeAll().catch(() => {});
+        void msg.edit(prompt + suffix).catch(() => {});
+        resolve(approved);
+      };
 
-      // Remove reactions and show result
-      await msg.reactions.removeAll().catch(() => {});
-      const suffix = approved ? '\n**→ ✅ 許可されました**' : '\n**→ ❌ 拒否されました**';
-      await msg.edit(prompt + suffix).catch(() => {});
+      collector.on('collect', (reaction) => {
+        const approved = reaction.emoji.name === '✅';
+        finalize(approved, approved ? '\n**→ ✅ 許可されました**' : '\n**→ ❌ 拒否されました**');
+      });
 
-      return approved;
-    } catch {
-      // Timeout — remove reactions and show result
-      await msg.reactions.removeAll().catch(() => {});
-      await msg.edit(prompt + '\n**→ ⏰ タイムアウト（拒否扱い）**').catch(() => {});
-      return false;
-    }
+      collector.on('end', (collected) => {
+        if (settled) return;
+        if (collected.size === 0) {
+          finalize(false, '\n**→ ⏰ タイムアウト（拒否扱い）**');
+        }
+      });
+    });
   }
 
   async requestUserInput(question: string, choices?: string[], allowFreeform?: boolean): Promise<{ answer: string; wasFreeform: boolean }> {

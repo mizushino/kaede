@@ -170,7 +170,11 @@ export abstract class Bot {
       author: 'scheduler',
       content: `<@${this.getBotId()}> ${entry.prompt}`,
     };
-    await agent.processMessage(incoming, [], []);
+    try {
+      await agent.processMessage(incoming, [], []);
+    } catch (err) {
+      logger.error(`[BOT] Schedule processing failed for "${entry.id}":`, err);
+    }
   }
 
   async shutdown(): Promise<void> {

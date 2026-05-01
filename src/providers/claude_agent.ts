@@ -102,19 +102,16 @@ When replying, use the channelId from the message and include messageId when rep
       logger.log(`[${tag}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);
 
       this.provider.dispose();
+      const isFatal = msg.includes('authentication failed') || attempt >= this.maxRetries;
       this.provider = this.createProvider();
 
-      if (msg.includes('authentication failed')) {
+      if (isFatal) {
         logger.error(`[${tag}] Error:`, err);
         await this.messenger.sendError(msg);
         return 'fatal';
       }
 
-      if (attempt < this.maxRetries) return 'retry';
-
-      logger.error(`[${tag}] Error:`, err);
-      await this.messenger.sendError(msg);
-      return 'fatal';
+      return 'retry';
     }
   }
 
