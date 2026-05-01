@@ -238,6 +238,7 @@ src/
 │   └── logger.ts         # シンプルなログユーティリティ
 ├── providers/
 │   ├── provider.ts       # BaseProvider 抽象クラス（ステータス整形・env 構築・ツール名/詳細/elicitation 共通化）
+│   ├── base_agent.ts     # BaseAgent 抽象クラス（共通の処理ループ・retry スケルトン・dispose 骨格）
 │   ├── index.ts          # provider のエクスポート集約
 │   ├── copilot.ts        # GitHub Copilot SDK 実装
 │   ├── copilot_agent.ts  # Copilot 用 Agent ラッパー（ToolContext 実装）
@@ -257,7 +258,7 @@ DiscordBot (discord/bot.ts)               ← Discord イベント受信
   └─ extends Bot (core/bot.ts)            ← チャンネル/サーバーごとの Agent 管理
        ├─ CopilotClientManager            ← Copilot クライアントの遅延初期化・世代管理
        ├─ Scheduler                       ← cronベースの定期タスク管理
-       └─ Agent (provider 切替)
+       └─ Agent (provider 切替, BaseAgent を継承)
             ├─ CopilotAgent (providers/copilot_agent.ts)
             │    └─ CopilotCodeProvider   ← Copilot セッション・リトライ・関数呼び出し
             │         ├─ Inbox / Tools / FunctionLoader
