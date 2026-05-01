@@ -59,7 +59,16 @@ export abstract class BaseAgent implements Agent {
     if (!this.processingPromise) {
       this.processingPromise = this.runProcessingLoop();
     }
-    await this.processingPromise;
+    const promise = this.processingPromise;
+    await promise;
+
+    // Race guard: a message may have been pushed after the loop drained but
+    // before its `finally` cleared `processingPromise`. If so, the loop exited
+    // without processing it. Restart processing here for any leftover items.
+    if (this.queue.length > 0 && !this.processingPromise) {
+      this.processingPromise = this.runProcessingLoop();
+      await this.processingPromise;
+    }
   }
 
   protected async runProcessingLoop(): Promise<void> {
