@@ -1,6 +1,6 @@
 # 🍁 Kaede
 
-GitHub Copilot SDK を利用した Discord AI エージェント。チャンネルやフォーラムスレッドで AI アシスタントと対話できます。
+GitHub Copilot SDK / Claude Agent SDK を利用した Discord AI エージェント。チャンネルやフォーラムスレッドで AI アシスタントと対話できます。
 
 ## ✨ 機能
 
@@ -45,7 +45,7 @@ npm install
 
 ### 5. 環境変数の設定
 
-`.env.claude`または`.env.gpt` をコピーして `.env` を作成:
+`.env.claude`または`.env.copilot` をコピーして `.env` を作成:
 
 ```sh
 cp .env.claude .env
@@ -127,10 +127,12 @@ MCP server は作業ディレクトリをこのリポジトリにして、コマ
 
 | 環境変数 | 説明 |
 |----------|------|
-| `CLAUDE_COMMAND` | Claude Code 実行ファイルのパスまたはコマンド（既定: SDK 同梱 binary / `claude`） |
+| `CLAUDE_COMMAND` | Claude Code 実行ファイルのパスまたはコマンド（既定: SDK 同梱の glibc/musl native binary を自動選択） |
 | `CLAUDE_ARGS` | Claude Agent SDK から Claude Code に追加する引数 |
 | `CLAUDE_PERMISSION_MODE` | Claude Agent SDK の permission mode（既定: `bypassPermissions`） |
 | `CLAUDE_ALLOWED_TOOLS` | Claude Agent SDK に渡す auto-allow ツール一覧（カンマ区切り） |
+| `CLAUDE_DISALLOWED_TOOLS` | Claude Agent SDK で禁止するツール一覧（カンマ区切り、既定で `AskUserQuestion` を含む） |
+| `REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
 
 ### 🌐 セッションスコープ
 
@@ -220,16 +222,28 @@ pm2 logs kaede
 src/
 ├── index.ts              # エントリーポイント（起動・グレースフルシャットダウン）
 ├── core/
-│   ├── agent.ts          # AI セッション管理（Copilot SDK 連携・リトライ）
-│   ├── bot.ts            # Bot 基底クラス（チャンネルごとの Agent 管理）
+│   ├── bot.ts            # Bot 基底クラス（チャンネル/サーバーごとの Agent 管理・provider 切替）
 │   ├── client.ts         # Copilot クライアント管理（遅延初期化・再接続）
-│   ├── inbox.ts          # メッセージキュー（イベント駆動・タイムアウト）
 │   ├── messenger.ts      # メッセージング抽象クラス（プラットフォーム共通ロジック）
+│   ├── inbox.ts          # メッセージキュー（イベント駆動・タイムアウト）
 │   ├── permissions.ts    # 権限管理（自動承認 / ユーザー確認）
-│   ├── functions.ts       # 関数ローダー（動的インポート・CRUD・ホットリロード）
+│   ├── functions.ts      # 関数ローダー（動的インポート・CRUD・ホットリロード）
+│   ├── prompts.ts        # `.prompt.md` ローダー（カスタムスラッシュコマンド）
 │   ├── scheduler.ts      # cronスケジューラー（定期タスク管理・JSON永続化）
+│   ├── counter.ts        # リクエスト回数カウンター（永続化）
+│   ├── queue_state.ts    # 保留メッセージ・未送信返信のスナップショット永続化
+│   ├── tool_contract.ts  # Discord MCP ツール名の共有定義
+│   ├── tools.ts          # Copilot SDK 向けコアツール定義
+│   ├── mcp_server.ts     # Discord 操作用 stdio MCP サーバー（Claude provider が利用）
 │   ├── status.ts         # ステータスアイコンマップ（ツール名 → 絵文字）
-│   └── tools.ts          # コアツール定義（send_message, get_messages 等）
+│   └── logger.ts         # シンプルなログユーティリティ
+├── providers/
+│   ├── provider.ts       # BaseProvider 抽象クラス（ステータス整形・env 構築）
+│   ├── index.ts          # provider のエクスポート集約
+│   ├── copilot.ts        # GitHub Copilot SDK 実装
+│   ├── copilot_agent.ts  # Copilot 用 Agent ラッパー（ToolContext 実装）
+│   ├── claude.ts         # Claude Agent SDK 実装（モデル一覧/effort/binary 解決）
+│   └── claude_agent.ts   # Claude 用 Agent ラッパー（MCP 経由で Discord 操作）
 └── discord/
     ├── bot.ts            # Discord Bot 実装（イベントハンドリング・画像DL）
     └── messenger.ts      # Discord Messenger 実装（リアクション承認・ステータス）
@@ -238,25 +252,28 @@ src/
 ### 🏗️ アーキテクチャ
 
 ```
-DiscordBot (discord/bot.ts)           ← Discord イベント受信
-  └─ extends Bot (core/bot.ts)        ← チャンネルごとの Agent 管理
-       ├─ CopilotClientManager        ← クライアントの遅延初期化・世代管理
-       ├─ Scheduler                    ← cronベースの定期タスク管理
-       └─ Agent (core/agent.ts)       ← Copilot セッション・リトライ
-            ├─ Inbox (core/inbox.ts)   ← メッセージキュー
-            ├─ Tools (core/tools.ts)   ← コアツール群
-            ├─ FunctionLoader          ← 関数の動的読み込み
-            └─ PermissionHandler       ← 操作の自動承認 / ユーザー確認
+DiscordBot (discord/bot.ts)               ← Discord イベント受信
+  └─ extends Bot (core/bot.ts)            ← チャンネル/サーバーごとの Agent 管理
+       ├─ CopilotClientManager            ← Copilot クライアントの遅延初期化・世代管理
+       ├─ Scheduler                       ← cronベースの定期タスク管理
+       └─ Agent (provider 切替)
+            ├─ CopilotAgent (providers/copilot_agent.ts)
+            │    └─ CopilotCodeProvider   ← Copilot セッション・リトライ・関数呼び出し
+            │         ├─ Inbox / Tools / FunctionLoader
+            │         └─ PermissionHandler
+            └─ ClaudeAgent  (providers/claude_agent.ts)
+                 └─ ClaudeCodeProvider    ← Claude Agent SDK ラップ（resume/effort/MCP）
+                      └─ Discord MCP server (core/mcp_server.ts)
 
-Messenger (core/messenger.ts)         ← プラットフォーム抽象化
+Messenger (core/messenger.ts)             ← プラットフォーム抽象化
   └─ DiscordMessenger (discord/messenger.ts)
 ```
 
-プラットフォーム固有のコードは `discord/` に集約されており、`Messenger` 抽象クラスを実装すれば他のプラットフォームにも対応可能です。
+プラットフォーム固有のコードは `discord/` に集約されており、`Messenger` 抽象クラスを実装すれば他のプラットフォームにも対応可能です。AI provider は `providers/` 配下で `BaseProvider` を継承する形で追加できます。
 
 ## 🤖 エージェント初期設定（AGENTS.md）
 
-AI の挙動・性格・ルールはワークスペースの `AGENTS.md` に記述することで制御できます。このファイルは Copilot SDK が自動的にシステムプロンプトに組み込みます。
+AI の挙動・性格・ルールはワークスペースの `AGENTS.md` に記述することで制御できます。Copilot SDK / Claude Agent SDK のいずれも、このファイルを自動的にシステムプロンプトに組み込みます。
 
 ### チャットで AGENTS.md を作る
 
@@ -289,14 +306,16 @@ AI が `WORKSPACE_DIR/AGENTS.md` を作成します。その後も会話を通�
 
 
 
+## ⌨️ スラッシュコマンド
+
 Discord のスラッシュコマンドとして利用できます。
 
 | コマンド | 説明 |
 |----------|------|
 | `/clear` | 現在のセッションをリセット（会話履歴・CLI セッションを削除） |
-| `/model set <model_id> [effort]` | 使用モデルを切り替え（例: `/model set claude-sonnet-4.6 high`） |
+| `/model set <model_id> [effort]` | 使用モデルを切り替え（Copilot 例: `/model set claude-sonnet-4.6 high` / Claude 例: `/model set sonnet high`） |
 | `/model get` | 現在のモデルと推論レベルを表示 |
-| `/model list` | 利用可能なモデル一覧を表示（コスト・推論レベル対応含む） |
+| `/model list` | 利用可能なモデル一覧を表示（Copilot はコスト含む / Claude は対応 effort 含む） |
 | `/schedule add <cron> <channel> <prompt> [description]` | 定期実行スケジュールを登録 |
 | `/schedule list` | 登録済みスケジュール一覧を表示 |
 | `/schedule remove <id>` | スケジュールを削除 |
@@ -364,9 +383,9 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 | `delete_func` | 🗑️ 関数の削除 |
 | `run_func` | 🚀 関数内のツールを即時実行 |
 
-### Copilot SDK 組み込みツール
+### Copilot SDK / Claude Agent SDK 組み込みツール
 
-Copilot SDK が提供するツール（`bash`, `view`, `create`, `edit`, `glob`, `grep`, `web_fetch` 等）も自動的に利用可能です。
+各 SDK が提供する組み込みツール（`bash`, `view` / `Read`, `create` / `Write`, `edit`, `glob`, `grep`, `web_fetch` / `WebFetch` 等）も自動的に利用可能です。Claude provider では Discord 操作は同梱の MCP サーバー（`mcp__discord__*`）経由で行われます。
 
 ## 🧩 関数（Function）システム
 
