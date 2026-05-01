@@ -174,7 +174,7 @@ export abstract class Bot {
 
   async shutdown(): Promise<void> {
     logger.log('[BOT] Shutting down...');
-    this.scheduler.stop();
+    this.scheduler.dispose();
     await Promise.all(
       [...this.sessions.values()].map(agent => agent.dispose())
     );

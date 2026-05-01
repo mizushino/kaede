@@ -101,7 +101,8 @@ const USER_RESPONSE_TIMEOUT_MS = Number(process.env.USER_RESPONSE_TIMEOUT_MS) ||
 class KaedeMcpServer {
   private readonly server: Server;
   private readonly discord: Client;
-  private ready = false;
+  private readonly readyPromise: Promise<void>;
+  private resolveReady!: () => void;
 
   constructor() {
     this.server = new Server(
@@ -118,6 +119,10 @@ class KaedeMcpServer {
       ],
     });
 
+    this.readyPromise = new Promise<void>(resolve => {
+      this.resolveReady = resolve;
+    });
+
     this.setupHandlers();
   }
 
@@ -128,7 +133,7 @@ class KaedeMcpServer {
     }
 
     this.discord.once('clientReady', () => {
-      this.ready = true;
+      this.resolveReady();
       console.error(`[MCP] Discord bot logged in as ${this.discord.user?.tag}`);
     });
 
@@ -148,9 +153,7 @@ class KaedeMcpServer {
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      if (!this.ready) {
-        throw new McpError(ErrorCode.InternalError, 'Discord client is not ready');
-      }
+      await this.readyPromise;
 
       try {
         switch (request.params.name) {

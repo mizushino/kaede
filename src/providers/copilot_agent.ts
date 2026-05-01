@@ -1,5 +1,4 @@
 import { CopilotClientManager } from '../core/client.js';
-import type { ToolContext } from '../core/tools.js';
 import type { Agent } from '../core/bot.js';
 import { FunctionLoader } from '../core/functions.js';
 import { Inbox, QueuedMessage, IncomingMessage } from '../core/inbox.js';
@@ -12,7 +11,7 @@ import { CopilotCodeProvider, DEFAULT_REASONING_EFFORT, type CopilotSendErrorAct
 
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 
-export class CopilotAgent implements Agent, ToolContext {
+export class CopilotAgent implements Agent {
 	model: string;
 	reasoningEffort: ReasoningEffort | '';
 	messenger: Messenger;
@@ -48,7 +47,9 @@ export class CopilotAgent implements Agent, ToolContext {
 			functionLoader: this.functionLoader,
 			permissionConfig: loadPermissionConfig(),
 			botUserId: this.botUserId,
-			toolContext: this,
+			queue: this.queue,
+			counter: this.counter,
+			scheduler: this.scheduler,
 			getModel: () => this.model,
 			getReasoningEffort: () => this.reasoningEffort,
 		});
@@ -164,8 +165,7 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 
 	async dispose(): Promise<void> {
 		this.queue.abort();
-		this.messenger.stopTyping();
-		this.messenger.clearStatus();
+		this.messenger.dispose();
 		this.provider.dispose();
 	}
 

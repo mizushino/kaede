@@ -119,6 +119,15 @@ export class Scheduler {
     this.tasks.clear();
   }
 
+  /** Stop tasks and release the file watcher. Use on shutdown. */
+  dispose(): void {
+    this.stop();
+    if (this.watching) {
+      fs.unwatchFile(this.filePath);
+      this.watching = false;
+    }
+  }
+
   private startWatching(): void {
     if (this.watching) return;
     this.watching = true;

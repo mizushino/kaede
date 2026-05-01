@@ -119,6 +119,17 @@ export abstract class Messenger {
     this.applyIdle();
   }
 
+  /** Release any timers held by this messenger. Call on agent dispose. */
+  dispose(): void {
+    this.stopTyping();
+    if (this.statusUpdateTimeout) {
+      clearTimeout(this.statusUpdateTimeout);
+      this.statusUpdateTimeout = null;
+    }
+    this.lastStatus = '';
+    this.lastStatusChangeTime = 0;
+  }
+
   // --- Message splitting (shared logic) ---
 
   splitMessage(content: string, maxLength = MESSAGE_MAX_LENGTH): string[] {

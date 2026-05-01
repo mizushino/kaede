@@ -174,8 +174,7 @@ When replying, use the channelId from the message and include messageId when rep
   async dispose(): Promise<void> {
     this.queue.abort();
     await this.syncPendingQueueSnapshot();
-    this.messenger.stopTyping();
-    this.messenger.clearStatus();
+    this.messenger.dispose();
     this.provider.dispose();
   }
 

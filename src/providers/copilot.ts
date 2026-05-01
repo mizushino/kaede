@@ -1,11 +1,14 @@
 import { CopilotSession } from '@github/copilot-sdk';
 import type { ElicitationContext, ElicitationResult } from '@github/copilot-sdk';
 import path from 'path';
-import { CopilotClientManager } from '../core/client.js';
+import type { CopilotClientManager } from '../core/client.js';
 import { FunctionLoader } from '../core/functions.js';
 import { createTools, type ToolContext } from '../core/tools.js';
 import { createPermissionHandler, type PermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
+import type { Inbox } from '../core/inbox.js';
+import type { RequestCounter } from '../core/counter.js';
+import type { Scheduler } from '../core/scheduler.js';
 import { BaseProvider } from './provider.js';
 import type { ProviderContext, ProviderOptions } from './provider.js';
 
@@ -21,7 +24,9 @@ export interface CopilotProviderContext extends ProviderContext {
 	functionLoader: FunctionLoader;
 	permissionConfig: PermissionConfig;
 	botUserId: string;
-	toolContext: ToolContext;
+	queue: Inbox;
+	counter: RequestCounter;
+	scheduler: Scheduler;
 	getModel(): string;
 	getReasoningEffort(): ReasoningEffort | '';
 }
@@ -190,7 +195,7 @@ export class CopilotCodeProvider extends BaseProvider {
 				);
 				return { answer, wasFreeform };
 			},
-			tools: [...createTools(this.context.toolContext), ...this.context.functionLoader.createTools(this.context.toolContext)],
+			tools: [...createTools(this.buildToolContext()), ...this.context.functionLoader.createTools(this.buildToolContext())],
 			systemMessage: {
 				content: `You are a helpful AI assistant operating in a chat channel.
 Your working directory is ${path.resolve(this.context.workspaceDir)}.
@@ -216,10 +221,21 @@ IMPORTANT RULES:
 	}
 
 	private async buildFullConfig() {
-		const fnTools = await this.context.functionLoader.loadTools(this.context.toolContext);
+		const fnTools = await this.context.functionLoader.loadTools(this.buildToolContext());
 		const config = this.buildSessionConfig();
 		config.tools = [...config.tools, ...fnTools];
 		return { config, fnTools };
+	}
+
+	private buildToolContext(): ToolContext {
+		return {
+			model: this.context.getModel(),
+			queue: this.context.queue,
+			messenger: this.context.messenger,
+			counter: this.context.counter,
+			scheduler: this.context.scheduler,
+			getRemainingTurnTimeMs: () => this.getRemainingTurnTimeMs(),
+		};
 	}
 
 	private async createFreshSession(): Promise<CopilotSession> {
