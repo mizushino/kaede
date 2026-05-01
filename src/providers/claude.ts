@@ -109,10 +109,6 @@ export class ClaudeCodeProvider extends BaseProvider {
     return 'Claude Agent SDK';
   }
 
-  private setTurnStartStatus(): void {
-    this.context.messenger.setStatus(`${this.getIcon()} Claude 応答中...`);
-  }
-
   private setDetectedStatus(content?: string | null): void {
     if (!content) return;
     const status = this.detectStructuredStatus(content);
@@ -156,8 +152,6 @@ export class ClaudeCodeProvider extends BaseProvider {
   }
 
   async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
-    this.setTurnStartStatus();
-
     this.sentDiscordMessage = false;
     this.timedOut = false;
 
