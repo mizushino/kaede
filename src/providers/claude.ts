@@ -1,10 +1,45 @@
 import { createHash, randomUUID } from 'crypto';
+import { existsSync } from 'fs';
+import { createRequire } from 'module';
 import path from 'path';
 import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { BaseProvider } from './provider.js';
 import type { ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
 import { getClaudeDiscordAllowedTools } from '../core/tool_contract.js';
+
+const require_ = createRequire(import.meta.url);
+
+function isGlibcRuntime(): boolean {
+  try {
+    const report = (process as unknown as { report?: { getReport(): { header?: { glibcVersionRuntime?: string } } } }).report?.getReport();
+    return Boolean(report?.header?.glibcVersionRuntime);
+  } catch {
+    return false;
+  }
+}
+
+function resolveClaudeBinary(): string | undefined {
+  if (process.env.CLAUDE_COMMAND) return process.env.CLAUDE_COMMAND;
+  if (process.platform !== 'linux') return undefined;
+
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  const glibcPkg = `@anthropic-ai/claude-agent-sdk-linux-${arch}`;
+  const muslPkg = `@anthropic-ai/claude-agent-sdk-linux-${arch}-musl`;
+  const order = isGlibcRuntime() ? [glibcPkg, muslPkg] : [muslPkg, glibcPkg];
+
+  for (const pkg of order) {
+    try {
+      const pkgJson = require_.resolve(`${pkg}/package.json`);
+      const candidate = path.join(path.dirname(pkgJson), 'claude');
+      if (existsSync(candidate)) return candidate;
+    } catch {
+      /* try next */
+    }
+  }
+
+  return undefined;
+}
 
 const CLI_SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
 const USER_RESPONSE_TIMEOUT = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
@@ -28,7 +63,7 @@ export class ClaudeCodeProvider extends BaseProvider {
 
   static async listModels(options: { workspaceDir?: string; claudeCommand?: string } = {}): Promise<ModelInfo[]> {
     const cwd = path.resolve(options.workspaceDir || process.cwd());
-    const claudeCommand = options.claudeCommand || process.env.CLAUDE_COMMAND;
+    const claudeCommand = options.claudeCommand || resolveClaudeBinary();
     const abortController = new AbortController();
 
     // Streaming-input mode (empty async iterable) lets us use control requests
@@ -260,7 +295,7 @@ export class ClaudeCodeProvider extends BaseProvider {
     const permissionMode = this.getPermissionMode();
     const env = this.getEnvironmentVariables();
     const sessionOptions = await this.resolveSessionOptions(workspaceDir, allowResume);
-    const claudeCommand = process.env.CLAUDE_COMMAND;
+    const claudeCommand = resolveClaudeBinary();
 
     return {
       abortController,
