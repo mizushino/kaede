@@ -167,20 +167,7 @@ export class DiscordBot extends Bot {
         .slice(0, 25);
       await interaction.respond(choices);
     } else if (interaction.commandName === 'model') {
-      try {
-        const client = await this.clientManager.getClient();
-        const models = await client.listModels();
-        const choices = models
-          .map(m => ({
-            name: m.billing?.multiplier != null ? `${m.id} (${m.billing.multiplier}x)` : m.id,
-            value: m.id,
-          }))
-          .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
-          .slice(0, 25);
-        await interaction.respond(choices);
-      } catch {
-        await interaction.respond([]);
-      }
+      await interaction.respond(await this.getModelAutocompleteChoices(focused));
     } else if (interaction.commandName === 'schedule') {
       const { readFile } = await import('fs/promises');
       try {
@@ -259,23 +246,7 @@ export class DiscordBot extends Bot {
 
       if (sub === 'list') {
         await interaction.deferReply({ ephemeral: true });
-        try {
-          const client = await this.clientManager.getClient();
-          const models = await client.listModels();
-          const rows = models.map(m => ({
-            id: m.id,
-            cost: m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?',
-            reasoning: m.supportedReasoningEfforts?.join('/') ?? '-',
-          }));
-          const idWidth = Math.max(5, ...rows.map(r => r.id.length));
-          const costWidth = Math.max(4, ...rows.map(r => r.cost.length));
-          const header = `${'MODEL'.padEnd(idWidth)}  ${'COST'.padEnd(costWidth)}  REASONING`;
-          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(costWidth)}  ${'─'.repeat(13)}`;
-          const lines = rows.map(r => `${r.id.padEnd(idWidth)}  ${r.cost.padEnd(costWidth)}  ${r.reasoning}`);
-          await interaction.editReply(`**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``);
-        } catch (err) {
-          await interaction.editReply(`❌ Failed to list models: ${(err as Error).message}`);
-        }
+        await interaction.editReply(await this.buildModelListReply());
       } else if (sub === 'get') {
         const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
@@ -414,6 +385,64 @@ export class DiscordBot extends Bot {
       });
       await interaction.editReply(`✅ プロンプト \`${prompt.name}\` を実行しました`);
       return;
+    }
+  }
+
+  private getConfiguredClaudeModels(): string[] {
+    return [process.env.CLAUDE_MODEL]
+      .filter((value): value is string => Boolean(value));
+  }
+
+  private async getModelAutocompleteChoices(focused: string): Promise<Array<{ name: string; value: string }>> {
+    switch (this.providerType) {
+      case 'claude':
+        return this.getConfiguredClaudeModels()
+          .filter(model => model.toLowerCase().includes(focused))
+          .slice(0, 25)
+          .map(model => ({ name: model, value: model }));
+      case 'copilot':
+        try {
+          const client = await this.clientManager.getClient();
+          const models = await client.listModels();
+          return models
+            .map(m => ({
+              name: m.billing?.multiplier != null ? `${m.id} (${m.billing.multiplier}x)` : m.id,
+              value: m.id,
+            }))
+            .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
+            .slice(0, 25);
+        } catch {
+          return [];
+        }
+    }
+  }
+
+  private async buildModelListReply(): Promise<string> {
+    switch (this.providerType) {
+      case 'claude': {
+        const models = this.getConfiguredClaudeModels();
+        const configured = models.length > 0 ? models.join('\n') : '(CLI default model)';
+        return `**Current provider:** ${this.providerType}\n**Configured model(s):**\n\`\`\`\n${configured}\n\`\`\``;
+      }
+      case 'copilot': {
+        try {
+          const client = await this.clientManager.getClient();
+          const models = await client.listModels();
+          const rows = models.map(m => ({
+            id: m.id,
+            cost: m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?',
+            reasoning: m.supportedReasoningEfforts?.join('/') ?? '-',
+          }));
+          const idWidth = Math.max(5, ...rows.map(row => row.id.length));
+          const costWidth = Math.max(4, ...rows.map(row => row.cost.length));
+          const header = `${'MODEL'.padEnd(idWidth)}  ${'COST'.padEnd(costWidth)}  REASONING`;
+          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(costWidth)}  ${'─'.repeat(13)}`;
+          const lines = rows.map(row => `${row.id.padEnd(idWidth)}  ${row.cost.padEnd(costWidth)}  ${row.reasoning}`);
+          return `**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
+        } catch (err) {
+          return `❌ Failed to list models: ${(err as Error).message}`;
+        }
+      }
     }
   }
 

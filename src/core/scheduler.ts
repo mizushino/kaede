@@ -20,6 +20,8 @@ export class Scheduler {
   private callback: ScheduleFireCallback;
   private filePath: string;
   private timezone: string;
+  private watching = false;
+  private lastSavedAt = 0;
 
   constructor(filePath: string, callback: ScheduleFireCallback, timezone = 'Asia/Tokyo') {
     this.filePath = filePath;
@@ -29,14 +31,20 @@ export class Scheduler {
 
   /** Load saved schedules from disk and start enabled ones. */
   restore(): void {
+    this.reloadFromDisk();
+    this.startWatching();
+  }
+
+  private reloadFromDisk(): void {
     try {
+      this.stop();
+      this.entries.clear();
       if (!fs.existsSync(this.filePath)) return;
+
       const data = JSON.parse(fs.readFileSync(this.filePath, 'utf-8')) as ScheduleEntry[];
       for (const entry of data) {
         this.entries.set(entry.id, entry);
-        if (entry.enabled) {
-          this.startTask(entry);
-        }
+        if (entry.enabled) this.startTask(entry);
       }
       logger.log(`[Scheduler] Restored ${data.length} schedule(s) (${this.tasks.size} active)`);
     } catch (err) {
@@ -111,6 +119,18 @@ export class Scheduler {
     this.tasks.clear();
   }
 
+  private startWatching(): void {
+    if (this.watching) return;
+    this.watching = true;
+
+    fs.watchFile(this.filePath, { interval: 1000 }, (curr, prev) => {
+      if (curr.mtimeMs === prev.mtimeMs) return;
+      if (Date.now() - this.lastSavedAt < 500) return;
+      logger.log('[Scheduler] Detected external schedule file change, reloading');
+      this.reloadFromDisk();
+    });
+  }
+
   private startTask(entry: ScheduleEntry): void {
     this.stopTask(entry.id);
     const task = cron.schedule(entry.cron, async () => {
@@ -135,6 +155,7 @@ export class Scheduler {
   private save(): void {
     try {
       const data = [...this.entries.values()];
+      this.lastSavedAt = Date.now();
       fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err) {
       logger.error('[Scheduler] Failed to save schedules:', err);

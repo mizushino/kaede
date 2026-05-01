@@ -45,6 +45,11 @@ export class Inbox {
     return drained;
   }
 
+  /** Return a read-only snapshot of queued messages. */
+  snapshot(): QueuedMessage[] {
+    return [...this.items];
+  }
+
   /** Block until a message arrives or the provided timeout elapses. */
   async waitForMessage(timeoutMs = DEFAULT_WAIT_TIMEOUT): Promise<void> {
     if (this.aborted) return;

@@ -8,6 +8,7 @@ GitHub Copilot SDK を利用した Discord AI エージェント。チャンネ�
 - 🖼️ 画像の添付・認識
 - 📊 ステータス表示（ツール実行状態のリアルタイム更新）
 - ⚡ イベント駆動型メッセージキューイング
+- 🔁 `AI_PROVIDER` による Copilot SDK / Claude Agent SDK 切り替え
 - 🔀 `/model` コマンドによるモデルのランタイム切り替え
 - 🧩 ホットリロード対応プラグインシステム（AI が自らツールを作成・管理）
 - 📝 カスタムプロンプトコマンド（`.prompt.md` ファイルで自動登録）
@@ -89,15 +90,43 @@ npm start
 `AGENT` 環境変数で `.env.<name>` を読み込めます:
 
 ```bash
-AGENT=claude npm start   # .env.claude を読み込んで起動
-AGENT=gpt npm start      # .env.gpt を読み込んで起動
+AGENT=kaede npm start   # .env.kaede を読み込んで起動
 
 # package.json のショートカット
-npm run claude
-npm run gpt
+npm run copilot         # GitHub Copilot SDK 経由で Copilot を起動
+npm run claude          # Claude Agent SDK 経由で Claude を起動
 ```
 
-エージェントごとに `.env.claude`, `.env.gpt` 等を用意し、`WORKSPACE_DIR` を分けることでプラグインやファイルを隔離できます。
+エージェントごとに `.env.copilot`, `.env.claude` 等を用意し、`WORKSPACE_DIR` を分けることでプラグインやファイルを隔離できます。
+
+### 🔁 AI Provider の切り替え
+
+既定では GitHub Copilot SDK を使用します。Claude を使う場合は `AI_PROVIDER=claude` を設定してください。Claude は Claude Agent SDK で永続セッションを再開します。
+
+| `AI_PROVIDER` | 実行方式 | 主なモデル環境変数 |
+|---------------|----------|--------------------|
+| `copilot`（デフォルト） | GitHub Copilot SDK | `COPILOT_MODEL` |
+| `claude` | Claude Agent SDK (`claude`) | `CLAUDE_MODEL` |
+
+```sh
+# Claude Agent SDK
+AI_PROVIDER=claude CLAUDE_MODEL=sonnet npm start
+```
+
+Claude provider は Discord MCP ツール（例: `mcp__discord__send_message`）を使って返信します。このリポジトリには MCP サーバーも同梱しており、Claude Agent SDK 側へ毎回 MCP server 設定を注入します。
+
+```sh
+npm run --silent mcp
+```
+
+MCP server は作業ディレクトリをこのリポジトリにして、コマンド `npm run --silent mcp` で起動されます。`npm run` の通常出力は stdio MCP のハンドシェイクを壊すため、`--silent` を付ける必要があります。Claude は SDK 側で同じ MCP server を毎回構成します。Claude Code のパスや追加引数は以下で調整できます。
+
+| 環境変数 | 説明 |
+|----------|------|
+| `CLAUDE_COMMAND` | Claude Code 実行ファイルのパスまたはコマンド（既定: SDK 同梱 binary / `claude`） |
+| `CLAUDE_ARGS` | Claude Agent SDK から Claude Code に追加する引数 |
+| `CLAUDE_PERMISSION_MODE` | Claude Agent SDK の permission mode（既定: `bypassPermissions`） |
+| `CLAUDE_ALLOWED_TOOLS` | Claude Agent SDK に渡す auto-allow ツール一覧（カンマ区切り） |
 
 ### 🌐 セッションスコープ
 

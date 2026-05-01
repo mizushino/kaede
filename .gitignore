@@ -2,8 +2,8 @@ node_modules/
 dist/
 .env
 .env.*
+!.env.copilot
 !.env.claude
-!.env.gpt
 *.log
 .DS_Store
 coverage/

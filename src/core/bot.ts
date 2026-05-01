@@ -1,4 +1,5 @@
-import { Agent } from './agent.js';
+import { CopilotAgent } from '../providers/index.js';
+import { ClaudeAgent } from '../providers/index.js';
 import { CopilotClientManager } from './client.js';
 import { RequestCounter } from './counter.js';
 import { Scheduler } from './scheduler.js';
@@ -9,12 +10,30 @@ import { writeFile } from 'fs/promises';
 import { logger } from './logger.js';
 
 export type SessionScope = 'channel' | 'server';
+export type AgentProviderType = 'copilot' | 'claude';
+
+const DEFAULT_PROVIDER: AgentProviderType = 'copilot';
+const PROVIDER_MODEL_ENV: Record<AgentProviderType, string> = {
+  copilot: 'COPILOT_MODEL',
+  claude: 'CLAUDE_MODEL',
+};
+
+export interface Agent {
+  model: string;
+  reasoningEffort?: string;
+  messenger: Messenger;
+  setModel(model: string, reasoningEffort?: string): Promise<void>;
+  processMessage(message: { id: string; channelId: string; author: string; content: string }, attachments: string[], files?: string[]): Promise<void>;
+  dispose(): Promise<void>;
+  deleteSession(): Promise<void>;
+}
 
 export abstract class Bot {
   protected readonly workspaceDir: string;
   protected readonly temporaryDir: string;
   protected readonly functionsDir: string;
   protected readonly agentName: string;
+  protected readonly providerType: AgentProviderType;
   protected readonly model: string;
   protected readonly sessionScope: SessionScope;
   protected readonly clientManager = new CopilotClientManager();
@@ -28,7 +47,8 @@ export abstract class Bot {
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
     this.functionsDir = process.env.FUNCTIONS_DIR || path.join(this.workspaceDir, 'functions');
     this.agentName = process.env.AGENT_NAME || 'agent';
-    this.model = process.env.COPILOT_MODEL || '';
+    this.providerType = this.normalizeProvider(process.env.AI_PROVIDER || process.env.AGENT_PROVIDER);
+    this.model = this.resolveInitialModel(this.providerType);
     this.sessionScope = (process.env.SESSION_SCOPE as SessionScope) || 'channel';
     this.counter = new RequestCounter(this.temporaryDir);
     this.scheduler = new Scheduler(
@@ -38,6 +58,7 @@ export abstract class Bot {
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
     logger.log(`[BOT] Agent name: ${this.agentName}`);
+    logger.log(`[BOT] Provider: ${this.providerType}`);
     logger.log(`[BOT] Session scope: ${this.sessionScope}`);
   }
 
@@ -69,9 +90,9 @@ export abstract class Bot {
     const sessionKey = this.resolveSessionKey(channelId, guildId);
     let agent = this.sessions.get(sessionKey);
     if (!agent) {
-      logger.log(`[BOT] Creating agent (model: ${this.model}, scope: ${this.sessionScope}) for ${this.sessionScope === 'server' ? 'server' : 'channel'} ${sessionKey}`);
+      logger.log(`[BOT] Creating ${this.providerType} agent (model: ${this.model || 'default'}, scope: ${this.sessionScope}) for ${this.sessionScope === 'server' ? 'server' : 'channel'} ${sessionKey}`);
       const messenger = this.createMessenger(channelId);
-      agent = new Agent(messenger, this.workspaceDir, this.functionsDir, this.model, this.clientManager, this.counter, this.scheduler, sessionKey, this.getBotId());
+      agent = this.createAgent(messenger, sessionKey);
       this.sessions.set(sessionKey, agent);
     } else if (agent.messenger.channelId !== channelId) {
       // Update active channel for typing indicators and status
@@ -85,13 +106,57 @@ export abstract class Bot {
     const agent = this.sessions.get(sessionKey);
     if (agent) {
       await agent.dispose();
-      await agent.deleteCliSession();
+      await agent.deleteSession();
       this.sessions.delete(sessionKey);
     }
     return agent;
   }
 
   abstract start(): Promise<void>;
+
+  private normalizeProvider(value?: string): AgentProviderType {
+    const normalizedValue = value?.trim().toLowerCase();
+    if (!normalizedValue) return DEFAULT_PROVIDER;
+
+    if (normalizedValue === 'copilot' || normalizedValue === 'claude') {
+      return normalizedValue;
+    }
+
+    logger.log(`[BOT] Unknown provider "${value}" from AI_PROVIDER/AGENT_PROVIDER, falling back to ${DEFAULT_PROVIDER}`);
+    return DEFAULT_PROVIDER;
+  }
+
+  private resolveInitialModel(provider: AgentProviderType): string {
+    const envName = PROVIDER_MODEL_ENV[provider];
+    return process.env[envName]?.trim() || '';
+  }
+
+  private createAgent(messenger: Messenger, sessionKey: string): Agent {
+    switch (this.providerType) {
+      case 'copilot':
+        return new CopilotAgent(
+          messenger,
+          this.workspaceDir,
+          this.functionsDir,
+          this.model,
+          this.clientManager,
+          this.counter,
+          this.scheduler,
+          sessionKey,
+          this.getBotId(),
+        );
+      case 'claude':
+        return new ClaudeAgent(
+          messenger,
+          this.workspaceDir,
+          this.model,
+          this.counter,
+          this.scheduler,
+          sessionKey,
+          this.getBotId(),
+        );
+    }
+  }
 
   /** Called by Scheduler when a cron job fires. */
   private async onScheduleFire(entry: import('./scheduler.js').ScheduleEntry): Promise<void> {

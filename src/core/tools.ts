@@ -5,6 +5,7 @@ import type { Messenger } from './messenger.js';
 import type { RequestCounter } from './counter.js';
 import type { Scheduler } from './scheduler.js';
 import { logger } from './logger.js';
+import { buildDeferredReplyMarker } from './queue_state.js';
 
 const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
 const WAIT_TIMEOUT_MARGIN = 5_000;
@@ -56,14 +57,7 @@ export function createTools(ctx: ToolContext) {
         }
 
         if (ctx.queue.length > 0) {
-          const unsentMarker = [
-            '[UNSENT MESSAGE]',
-            'send_message was not delivered to Discord because newer queued messages were waiting.',
-            `channelId: ${channelId}`,
-            ...(messageId ? [`replyToMessageId: ${messageId}`] : []),
-            ...(imagePath ? [`imagePath: ${imagePath}`] : []),
-            `content: ${content ?? ''}`,
-          ].join('\n');
+          const unsentMarker = buildDeferredReplyMarker({ channelId, content, messageId, imagePath });
 
           ctx.queue.pushFront({
             message: {

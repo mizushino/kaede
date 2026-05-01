@@ -158,6 +158,25 @@ export class DiscordMessenger extends Messenger {
     const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
     const hasChoices = choices && choices.length > 0;
     const canFreeform = allowFreeform !== false; // default true
+    const normalizeEmoji = (value: string): string => value.replace(/\uFE0F|\u20E3/g, '');
+    const getChoiceIndexFromReaction = (reaction: { emoji: { name?: string | null; toString(): string } }): number => {
+      const candidates = [reaction.emoji.name ?? '', reaction.emoji.toString?.() ?? '']
+        .map(normalizeEmoji)
+        .filter(Boolean);
+
+      for (const candidate of candidates) {
+        if (candidate === '🔟') return 9;
+        if (/^[1-9]$/.test(candidate)) return Number(candidate) - 1;
+      }
+
+      return -1;
+    };
+    const getChoiceIndexFromMessage = (value: string): number => {
+      const normalized = value.trim().replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+      if (normalized === '10') return 9;
+      if (/^[1-9]$/.test(normalized)) return Number(normalized) - 1;
+      return -1;
+    };
 
     // Build prompt message
     let prompt = `❓ **質問**\n${question}`;
@@ -169,13 +188,6 @@ export class DiscordMessenger extends Messenger {
     }
 
     const msg = await channel.send(prompt);
-
-    // Add reaction emojis for choices
-    if (hasChoices) {
-      for (let i = 0; i < Math.min(choices.length, NUMBER_EMOJIS.length); i++) {
-        await msg.react(NUMBER_EMOJIS[i]);
-      }
-    }
 
     const botId = this.client.user?.id;
     const timeoutMs = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
@@ -200,14 +212,15 @@ export class DiscordMessenger extends Messenger {
       if (hasChoices) {
         const reactionFilter = (reaction: any, user: any) => {
           if (user.id === botId) return false;
-          return NUMBER_EMOJIS.slice(0, choices.length).includes(reaction.emoji.name);
+          const choiceIndex = getChoiceIndexFromReaction(reaction);
+          return choiceIndex >= 0 && choiceIndex < choices.length;
         };
         msg.awaitReactions({ filter: reactionFilter, max: 1, time: timeoutMs, errors: ['time'] })
           .then(async (collected) => {
             if (settled) return;
             cleanup();
             const reaction = collected.first();
-            const idx = NUMBER_EMOJIS.indexOf(reaction?.emoji.name ?? '');
+            const idx = reaction ? getChoiceIndexFromReaction(reaction as any) : -1;
             const answer = idx >= 0 && idx < choices.length ? choices[idx] : '';
             await msg.reactions.removeAll().catch(() => {});
             await msg.edit(prompt + `\n\n**→ ${answer}**`).catch(() => {});
@@ -223,12 +236,23 @@ export class DiscordMessenger extends Messenger {
           .then(async (collected) => {
             if (settled) return;
             cleanup();
-            const answer = collected.first()?.content ?? '';
+            const rawAnswer = collected.first()?.content ?? '';
+            const choiceIndex = hasChoices ? getChoiceIndexFromMessage(rawAnswer) : -1;
+            const answer = choiceIndex >= 0 && choices && choiceIndex < choices.length ? choices[choiceIndex] : rawAnswer;
             await msg.reactions.removeAll().catch(() => {});
             await msg.edit(prompt + `\n\n**→ 💬 ${answer.slice(0, 100)}**`).catch(() => {});
-            resolve({ answer, wasFreeform: true });
+            resolve({ answer, wasFreeform: choiceIndex < 0 });
           })
           .catch(() => {}); // timeout handled above
+      }
+
+      // Add reaction emojis after collectors are active.
+      if (hasChoices) {
+        void (async () => {
+          for (let i = 0; i < Math.min(choices.length, NUMBER_EMOJIS.length); i++) {
+            await msg.react(NUMBER_EMOJIS[i]).catch(() => {});
+          }
+        })();
       }
     });
   }
