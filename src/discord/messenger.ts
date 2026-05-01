@@ -6,13 +6,11 @@ import type { MessageInfo, ChannelInfo, ServerInfo } from '../core/messenger.js'
 import { logger } from '../core/logger.js';
 
 export class DiscordMessenger extends Messenger {
-  channelId: string;
   private client: Client;
 
   constructor(client: Client, channelId: string) {
-    super();
+    super(channelId);
     this.client = client;
-    this.channelId = channelId;
   }
 
   async sendMessage(channelId: string, content?: string, replyTo?: string, imagePath?: string): Promise<number> {

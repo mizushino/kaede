@@ -1,5 +1,6 @@
 import { CopilotAgent } from '../providers/index.js';
 import { ClaudeAgent } from '../providers/index.js';
+import type { ReasoningEffort } from '../providers/provider.js';
 import { CopilotClientManager } from './client.js';
 import { RequestCounter } from './counter.js';
 import { Scheduler } from './scheduler.js';
@@ -20,9 +21,9 @@ const PROVIDER_MODEL_ENV: Record<AgentProviderType, string> = {
 
 export interface Agent {
   model: string;
-  reasoningEffort?: string;
+  reasoningEffort?: ReasoningEffort | '';
   messenger: Messenger;
-  setModel(model: string, reasoningEffort?: string): Promise<void>;
+  setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void>;
   processMessage(message: { id: string; channelId: string; author: string; content: string }, attachments: string[], files?: string[]): Promise<void>;
   getRemainingTurnTimeMs(): number | null;
   dispose(): Promise<void>;
@@ -97,7 +98,7 @@ export abstract class Bot {
       this.sessions.set(sessionKey, agent);
     } else if (agent.messenger.channelId !== channelId) {
       // Update active channel for typing indicators and status
-      agent.messenger.channelId = channelId;
+      agent.messenger.setActiveChannel(channelId);
     }
     return agent;
   }

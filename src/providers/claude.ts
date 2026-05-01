@@ -44,6 +44,10 @@ function resolveClaudeBinary(): string | undefined {
 const CLI_SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
 const USER_RESPONSE_TIMEOUT = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 
+interface QueryState {
+  sentDiscordMessage: boolean;
+}
+
 export class ClaudeCodeProvider extends BaseProvider {
   readonly name = 'claude';
 
@@ -84,7 +88,6 @@ export class ClaudeCodeProvider extends BaseProvider {
   private activeAbortController?: AbortController;
   private currentSessionId?: string;
   private timedOut = false;
-  private sentDiscordMessage = false;
 
   protected getIcon(): string {
     return '⚜️';
@@ -180,6 +183,20 @@ export class ClaudeCodeProvider extends BaseProvider {
       || /│\s*\d+\.\s+.+│/.test(content);
   }
 
+  private getEnvironmentVariables(): Record<string, string | undefined> {
+    return {
+      ...process.env,
+      PATH: process.env.PATH ?? '',
+      HOME: process.env.HOME ?? '',
+      USER: process.env.USER ?? '',
+      SHELL: process.env.SHELL ?? '/bin/bash',
+      TERM: 'dumb',
+      FORCE_COLOR: '0',
+      CLICOLOR: '0',
+      NO_COLOR: '1',
+    };
+  }
+
   sendToTerminal(text: string): void {
     if (text.includes('\u0003') || text.includes('\x03')) {
       void this.activeQuery?.interrupt().catch(err => {
@@ -213,8 +230,11 @@ export class ClaudeCodeProvider extends BaseProvider {
     }
   }
 
+  async setModel(): Promise<void> {
+    this.dispose();
+  }
+
   async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
-    this.sentDiscordMessage = false;
     this.timedOut = false;
 
     const abortController = new AbortController();
@@ -262,9 +282,9 @@ export class ClaudeCodeProvider extends BaseProvider {
     modelOverride: string | undefined,
     allowResume: boolean,
   ): Promise<void> {
-    this.sentDiscordMessage = false;
+    const state: QueryState = { sentDiscordMessage: false };
 
-    const queryOptions = await this.buildQueryOptions(options, abortController, modelOverride, allowResume);
+    const queryOptions = await this.buildQueryOptions(options, abortController, modelOverride, allowResume, state);
     const stream = query({ prompt, options: queryOptions });
     this.activeQuery = stream;
 
@@ -287,7 +307,7 @@ export class ClaudeCodeProvider extends BaseProvider {
       }
 
       if (message.type === 'assistant') {
-        this.handleAssistantToolUses(message);
+        this.handleAssistantToolUses(message, state);
         continue;
       }
 
@@ -327,7 +347,7 @@ export class ClaudeCodeProvider extends BaseProvider {
           continue;
         }
 
-        if (!this.sentDiscordMessage && message.result.trim()) {
+        if (!state.sentDiscordMessage && message.result.trim()) {
           logger.log(`[${this.name}] Result completed without discord send_message tool usage`);
         }
       }
@@ -351,6 +371,7 @@ export class ClaudeCodeProvider extends BaseProvider {
     abortController: AbortController,
     modelOverride: string | undefined,
     allowResume: boolean,
+    state: QueryState,
   ): Promise<Options> {
     const workspaceDir = path.resolve(this.context.workspaceDir);
     const permissionMode = this.getPermissionMode();
@@ -378,7 +399,7 @@ export class ClaudeCodeProvider extends BaseProvider {
         const detail = this.formatToolDetail(normalizedToolName, input);
 
         if (normalizedToolName === 'send_message') {
-          this.sentDiscordMessage = true;
+          state.sentDiscordMessage = true;
         }
 
         this.context.messenger.setStatus(this.formatToolStatus(normalizedToolName, detail || undefined));
@@ -631,7 +652,7 @@ export class ClaudeCodeProvider extends BaseProvider {
     };
   }
 
-  private handleAssistantToolUses(message: { message?: { content?: unknown } }): void {
+  private handleAssistantToolUses(message: { message?: { content?: unknown } }, state: QueryState): void {
     const content = message.message?.content;
     if (!Array.isArray(content)) return;
 
@@ -645,7 +666,7 @@ export class ClaudeCodeProvider extends BaseProvider {
       logger.log(`[${this.name}] tool: ${b.name}${detail ? ` | ${detail}` : ''}`);
 
       if (normalized === 'send_message') {
-        this.sentDiscordMessage = true;
+        state.sentDiscordMessage = true;
         continue;
       }
 

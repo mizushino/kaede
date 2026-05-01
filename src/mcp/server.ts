@@ -8,6 +8,7 @@ import path from 'path';
 import { z } from 'zod';
 import { DISCORD_TOOL_CONTRACTS } from '../core/tool_contract.js';
 import { enqueueDeferredReply, readPendingQueueSnapshot } from '../core/queue_state.js';
+import { logger } from '../core/logger.js';
 
 const WORKSPACE_DIR = path.resolve(process.env.WORKSPACE_DIR || 'workspace');
 const FUNCTIONS_DIR = path.resolve(process.env.FUNCTIONS_DIR || path.join(WORKSPACE_DIR, 'functions'));
@@ -200,14 +201,18 @@ class KaedeMcpServer {
     const pending = await this.readCurrentPendingQueue();
     if (pending.pendingCount > 0) {
       if (MCP_SESSION_KEY) {
-        await enqueueDeferredReply(MCP_SESSION_KEY, {
-          id: `deferred-${Date.now()}`,
-          channelId: parsed.channelId,
-          ...(parsed.content ? { content: parsed.content } : {}),
-          ...(parsed.messageId ? { messageId: parsed.messageId } : {}),
-          ...(parsed.imagePath ? { imagePath: parsed.imagePath } : {}),
-          createdAt: new Date().toISOString(),
-        }, TEMPORARY_DIR);
+        try {
+          await enqueueDeferredReply(MCP_SESSION_KEY, {
+            id: `deferred-${Date.now()}`,
+            channelId: parsed.channelId,
+            ...(parsed.content ? { content: parsed.content } : {}),
+            ...(parsed.messageId ? { messageId: parsed.messageId } : {}),
+            ...(parsed.imagePath ? { imagePath: parsed.imagePath } : {}),
+            createdAt: new Date().toISOString(),
+          }, TEMPORARY_DIR);
+        } catch (err) {
+          logger.error(`[mcp] Failed to persist deferred reply for ${MCP_SESSION_KEY}:`, err);
+        }
       }
 
       return {

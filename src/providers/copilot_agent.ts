@@ -5,6 +5,7 @@ import { Inbox, QueuedMessage, IncomingMessage } from '../core/inbox.js';
 import type { Messenger } from '../core/messenger.js';
 import { loadPermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
+import { buildIncomingMessagePrompt } from '../core/prompt_helpers.js';
 import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
 import { CopilotCodeProvider, DEFAULT_REASONING_EFFORT, type CopilotSendErrorAction, type ReasoningEffort } from './copilot.js';
@@ -47,11 +48,16 @@ export class CopilotAgent implements Agent {
 			functionLoader: this.functionLoader,
 			permissionConfig: loadPermissionConfig(),
 			botUserId: this.botUserId,
-			queue: this.queue,
-			counter: this.counter,
-			scheduler: this.scheduler,
 			getModel: () => this.model,
 			getReasoningEffort: () => this.reasoningEffort,
+			createToolContext: () => ({
+				model: this.model,
+				queue: this.queue,
+				messenger: this.messenger,
+				counter: this.counter,
+				scheduler: this.scheduler,
+				getRemainingTurnTimeMs: () => this.provider.getRemainingTurnTimeMs(),
+			}),
 		});
 	}
 
@@ -141,26 +147,12 @@ export class CopilotAgent implements Agent {
 	}
 
 	private buildPrompt(items: QueuedMessage[]): string {
-		const messageData = items.map(item => ({
-			id: item.message.id,
-			channelId: item.message.channelId,
-			author: item.message.author,
-			content: item.message.content,
-			hasAttachments: item.attachments.length > 0,
-			...(item.files.length > 0 ? { files: item.files } : {}),
-		}));
-
-		const allFiles = items.flatMap(item => item.files);
-		const fileNote = allFiles.length > 0
-			? `\n\nAttached files (use view tool to read): ${allFiles.join(', ')}`
-			: '';
-
-		return `${JSON.stringify(messageData)}${fileNote}
-
-Important: Use send_message to respond. You may reply to a specific message by including its messageId. Only respond to messages directed at you based on context.
+		return buildIncomingMessagePrompt(items, {
+			suffix: `Important: Use send_message to respond. You may reply to a specific message by including its messageId. Only respond to messages directed at you based on context.
 send_message
 channelId: (use the channelId from the message you want to reply to)
-messageId: (Optional - use the ID of the message you want to reply to from the JSON above)`;
+messageId: (Optional - use the ID of the message you want to reply to from the JSON above)`,
+		});
 	}
 
 	async dispose(): Promise<void> {

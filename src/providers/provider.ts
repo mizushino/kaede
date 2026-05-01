@@ -4,10 +4,12 @@ import { STATUS_ICON } from '../core/status.js';
 
 const STATUS_MAX_LENGTH = 88;
 
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface ProviderOptions {
   model?: string;
   attachments?: string[];
-  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | '';
+  reasoningEffort?: ReasoningEffort | '';
 }
 
 export interface ProviderContext {
@@ -204,21 +206,10 @@ export abstract class BaseProvider {
     return { action: 'accept', content };
   }
 
-  protected getEnvironmentVariables(): Record<string, string | undefined> {
-    return {
-      ...process.env,
-      PATH: process.env.PATH ?? '',
-      HOME: process.env.HOME ?? '',
-      USER: process.env.USER ?? '',
-      SHELL: process.env.SHELL ?? '/bin/bash',
-      TERM: 'dumb',
-      FORCE_COLOR: '0',
-      CLICOLOR: '0',
-      NO_COLOR: '1',
-    };
-  }
-
   abstract sendPrompt(prompt: string, options?: ProviderOptions): Promise<void>;
+
+  /** Reset session-level state when the agent's model changes. */
+  async setModel(): Promise<void> {}
 
   getRemainingTurnTimeMs(): number | null {
     return null;

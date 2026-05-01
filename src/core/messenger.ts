@@ -23,7 +23,31 @@ const MESSAGE_MAX_LENGTH = 2000;
 const STATUS_THROTTLE_MS = 1000;
 
 export abstract class Messenger {
-  abstract channelId: string;
+  protected _channelId: string;
+
+  constructor(channelId: string) {
+    this._channelId = channelId;
+  }
+
+  get channelId(): string {
+    return this._channelId;
+  }
+
+  /**
+   * Update the active channel this messenger targets. Resets typing/status state
+   * to avoid leaking timers or stale status into the new channel.
+   */
+  setActiveChannel(channelId: string): void {
+    if (this._channelId === channelId) return;
+    this.stopTyping();
+    if (this.statusUpdateTimeout) {
+      clearTimeout(this.statusUpdateTimeout);
+      this.statusUpdateTimeout = null;
+    }
+    this.lastStatus = '';
+    this.lastStatusChangeTime = 0;
+    this._channelId = channelId;
+  }
 
   // --- Message operations (platform-specific) ---
 

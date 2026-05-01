@@ -6,6 +6,7 @@ import type { Scheduler } from '../core/scheduler.js';
 import type { Agent } from '../core/bot.js';
 import { getClaudeDiscordPromptSignatures } from '../core/tool_contract.js';
 import { buildDeferredReplyMarker, consumeDeferredReplies, writePendingQueueSnapshot } from '../core/queue_state.js';
+import { buildIncomingMessagePrompt } from '../core/prompt_helpers.js';
 import { ClaudeCodeProvider } from './claude.js';
 import { BaseProvider } from './provider.js';
 import { logger } from '../core/logger.js';
@@ -51,8 +52,7 @@ export class ClaudeAgent implements Agent {
   async setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void> {
     this.model = model;
     if (reasoningEffort !== undefined) this.reasoningEffort = reasoningEffort;
-    this.provider.dispose();
-    this.provider = this.createProvider();
+    await this.provider.setModel();
   }
 
   sendToTerminal(text: string): void {
@@ -141,24 +141,10 @@ export class ClaudeAgent implements Agent {
   }
 
   private buildPrompt(items: QueuedMessage[]): string {
-    const messageData = items.map(item => ({
-      id: item.message.id,
-      channelId: item.message.channelId,
-      author: item.message.author,
-      content: item.message.content,
-      hasAttachments: item.attachments.length > 0,
-      attachments: item.attachments,
-      ...(item.files.length > 0 ? { files: item.files } : {}),
-    }));
-
-    const allFiles = items.flatMap(item => item.files);
-    const fileNote = allFiles.length > 0
-      ? `\n\nAttached files (read them from disk if needed): ${allFiles.join(', ')}`
-      : '';
-
-    return `${JSON.stringify(messageData)}${fileNote}
-
-You are an AI agent running inside ${this.provider.getRuntimeLabel()}.
+    return buildIncomingMessagePrompt(items, {
+      includeAttachments: true,
+      fileNoteTemplate: '\n\nAttached files (read them from disk if needed): {files}',
+      suffix: `You are an AI agent running inside ${this.provider.getRuntimeLabel()}.
 Your working directory is ${path.resolve(this.workspaceDir)}.
 Always respond in the same language as the user's message.
 Only respond to messages directed at you based on context.
@@ -168,7 +154,8 @@ If your provider exposes these tools with different names, use the equivalent Di
 When you need clarification or want the user to choose from options, prefer the Discord ask_user tool instead of only describing a question in plain text.
 Do not use the built-in AskUserQuestion tool. In this bot environment, interactive questions must go through the Discord ask_user MCP tool.
 If send_message reports queued/new_messages_waiting, treat the current reply as stale and do not force it out.
-When replying, use the channelId from the message and include messageId when replying to a specific message.`;
+When replying, use the channelId from the message and include messageId when replying to a specific message.`,
+    });
   }
 
   async dispose(): Promise<void> {

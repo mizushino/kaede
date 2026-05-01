@@ -6,13 +6,10 @@ import { FunctionLoader } from '../core/functions.js';
 import { createTools, type ToolContext } from '../core/tools.js';
 import { createPermissionHandler, type PermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
-import type { Inbox } from '../core/inbox.js';
-import type { RequestCounter } from '../core/counter.js';
-import type { Scheduler } from '../core/scheduler.js';
 import { BaseProvider } from './provider.js';
-import type { ProviderContext, ProviderOptions } from './provider.js';
+import type { ProviderContext, ProviderOptions, ReasoningEffort as BaseReasoningEffort } from './provider.js';
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = BaseReasoningEffort;
 export type CopilotSendErrorAction = 'retry' | 'stop' | 'connection' | 'fail';
 
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
@@ -24,11 +21,14 @@ export interface CopilotProviderContext extends ProviderContext {
 	functionLoader: FunctionLoader;
 	permissionConfig: PermissionConfig;
 	botUserId: string;
-	queue: Inbox;
-	counter: RequestCounter;
-	scheduler: Scheduler;
 	getModel(): string;
 	getReasoningEffort(): ReasoningEffort | '';
+	/**
+	 * Factory invoked once per session-config build. Returns a fresh ToolContext
+	 * snapshot of the owning agent's mutable state (model, queue, counter, etc.).
+	 * Implementations should construct a new object each call rather than caching.
+	 */
+	createToolContext(): ToolContext;
 }
 
 export class CopilotCodeProvider extends BaseProvider {
@@ -150,7 +150,7 @@ export class CopilotCodeProvider extends BaseProvider {
 		};
 	}
 
-	private buildSessionConfig() {
+	private async buildSessionConfig() {
 		const channelId = this.context.messenger.channelId;
 		const provider = this.buildProviderConfig();
 		const reasoningEffort = this.context.getReasoningEffort();
@@ -170,7 +170,15 @@ export class CopilotCodeProvider extends BaseProvider {
 					}
 				: undefined;
 
-		return {
+		const toolContext = this.context.createToolContext();
+		const fnTools = await this.context.functionLoader.loadTools(toolContext);
+		const tools = [
+			...createTools(toolContext),
+			...this.context.functionLoader.createTools(toolContext),
+			...fnTools,
+		];
+
+		const config = {
 			model: this.context.getModel(),
 			workingDirectory: path.resolve(this.context.workspaceDir),
 			enableConfigDiscovery: true,
@@ -195,7 +203,7 @@ export class CopilotCodeProvider extends BaseProvider {
 				);
 				return { answer, wasFreeform };
 			},
-			tools: [...createTools(this.buildToolContext()), ...this.context.functionLoader.createTools(this.buildToolContext())],
+			tools,
 			systemMessage: {
 				content: `You are a helpful AI assistant operating in a chat channel.
 Your working directory is ${path.resolve(this.context.workspaceDir)}.
@@ -218,24 +226,8 @@ IMPORTANT RULES:
 - Do not end the session without calling wait_messages.`,
 			},
 		};
-	}
 
-	private async buildFullConfig() {
-		const fnTools = await this.context.functionLoader.loadTools(this.buildToolContext());
-		const config = this.buildSessionConfig();
-		config.tools = [...config.tools, ...fnTools];
 		return { config, fnTools };
-	}
-
-	private buildToolContext(): ToolContext {
-		return {
-			model: this.context.getModel(),
-			queue: this.context.queue,
-			messenger: this.context.messenger,
-			counter: this.context.counter,
-			scheduler: this.context.scheduler,
-			getRemainingTurnTimeMs: () => this.getRemainingTurnTimeMs(),
-		};
 	}
 
 	private async createFreshSession(): Promise<CopilotSession> {
@@ -243,7 +235,7 @@ IMPORTANT RULES:
 
 		const client = await this.context.clientManager.getClient();
 		const sessionId = this.getSessionId();
-		const { config, fnTools } = await this.buildFullConfig();
+		const { config, fnTools } = await this.buildSessionConfig();
 
 		try {
 			const session = await client.resumeSession(sessionId, config);
@@ -266,7 +258,7 @@ IMPORTANT RULES:
 	private async resumeSession(): Promise<CopilotSession> {
 		const client = await this.context.clientManager.getClient();
 		const sessionId = this.getSessionId();
-		const { config } = await this.buildFullConfig();
+		const { config } = await this.buildSessionConfig();
 
 		const session = await client.resumeSession(sessionId, config);
 		this.setupEventHandlers(session);
