@@ -22,9 +22,13 @@ GitHub Copilot SDK を利用した Discord AI エージェント。チャンネ�
 
 👉 https://nodejs.org/ja/download
 
-### 2. GitHub CLI のインストール
+### 2. Agent Clientのインストール
 
+(GitHubCopilot) GitHub CLI のインストール
 👉 https://github.com/cli/cli#installation
+
+(ClaudeCode) Claude Code のインストール
+👉 https://code.claude.com/docs/ja/setup
 
 ### 3. リポジトリのクローン
 
