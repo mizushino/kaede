@@ -67,7 +67,6 @@ export class CopilotCodeProvider extends BaseProvider {
 
 		const imageAttachments = (options?.attachments ?? []).map(filePath => ({ type: 'file' as const, path: filePath }));
 
-		this.context.messenger.setStatus(`${this.getIcon()} ${this.getDisplayName()} 応答生成中...`);
 		const turnDeadlineMs = Date.now() + SESSION_TIMEOUT;
 		this.activeTurnDeadlineMs = turnDeadlineMs;
 
