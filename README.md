@@ -234,19 +234,20 @@ src/
 │   ├── queue_state.ts    # 保留メッセージ・未送信返信のスナップショット永続化
 │   ├── tool_contract.ts  # Discord MCP ツール名の共有定義
 │   ├── tools.ts          # Copilot SDK 向けコアツール定義
-│   ├── mcp_server.ts     # Discord 操作用 stdio MCP サーバー（Claude provider が利用）
 │   ├── status.ts         # ステータスアイコンマップ（ツール名 → 絵文字）
 │   └── logger.ts         # シンプルなログユーティリティ
 ├── providers/
-│   ├── provider.ts       # BaseProvider 抽象クラス（ステータス整形・env 構築）
+│   ├── provider.ts       # BaseProvider 抽象クラス（ステータス整形・env 構築・ツール名/詳細/elicitation 共通化）
 │   ├── index.ts          # provider のエクスポート集約
 │   ├── copilot.ts        # GitHub Copilot SDK 実装
 │   ├── copilot_agent.ts  # Copilot 用 Agent ラッパー（ToolContext 実装）
 │   ├── claude.ts         # Claude Agent SDK 実装（モデル一覧/effort/binary 解決）
 │   └── claude_agent.ts   # Claude 用 Agent ラッパー（MCP 経由で Discord 操作）
-└── discord/
-    ├── bot.ts            # Discord Bot 実装（イベントハンドリング・画像DL）
-    └── messenger.ts      # Discord Messenger 実装（リアクション承認・ステータス）
+├── discord/
+│   ├── bot.ts            # Discord Bot 実装（イベントハンドリング・画像DL）
+│   └── messenger.ts      # Discord Messenger 実装（リアクション承認・ステータス）
+└── mcp/
+    └── server.ts         # Discord 操作用 stdio MCP サーバー（Claude provider が利用）
 ```
 
 ### 🏗️ アーキテクチャ
@@ -263,7 +264,7 @@ DiscordBot (discord/bot.ts)               ← Discord イベント受信
             │         └─ PermissionHandler
             └─ ClaudeAgent  (providers/claude_agent.ts)
                  └─ ClaudeCodeProvider    ← Claude Agent SDK ラップ（resume/effort/MCP）
-                      └─ Discord MCP server (core/mcp_server.ts)
+                      └─ Discord MCP server (mcp/server.ts)
 
 Messenger (core/messenger.ts)             ← プラットフォーム抽象化
   └─ DiscordMessenger (discord/messenger.ts)

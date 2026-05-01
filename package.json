@@ -8,7 +8,7 @@
     "start": "tsx --env-file=.env${AGENT:+.$AGENT} src/index.ts",
     "copilot": "AGENT=copilot npm start",
     "claude": "AGENT=claude npm start",
-    "mcp": "tsx --env-file=.env${AGENT:+.$AGENT} src/core/mcp_server.ts"
+    "mcp": "tsx --env-file=.env${AGENT:+.$AGENT} src/mcp/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.126",

@@ -6,8 +6,8 @@ import { Client, GatewayIntentBits, TextChannel, ThreadChannel, AttachmentBuilde
 import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
-import { DISCORD_TOOL_CONTRACTS } from './tool_contract.js';
-import { enqueueDeferredReply, readPendingQueueSnapshot } from './queue_state.js';
+import { DISCORD_TOOL_CONTRACTS } from '../core/tool_contract.js';
+import { enqueueDeferredReply, readPendingQueueSnapshot } from '../core/queue_state.js';
 
 const WORKSPACE_DIR = path.resolve(process.env.WORKSPACE_DIR || 'workspace');
 const FUNCTIONS_DIR = path.resolve(process.env.FUNCTIONS_DIR || path.join(WORKSPACE_DIR, 'functions'));

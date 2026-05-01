@@ -24,6 +24,7 @@ export interface Agent {
   messenger: Messenger;
   setModel(model: string, reasoningEffort?: string): Promise<void>;
   processMessage(message: { id: string; channelId: string; author: string; content: string }, attachments: string[], files?: string[]): Promise<void>;
+  getRemainingTurnTimeMs(): number | null;
   dispose(): Promise<void>;
   deleteSession(): Promise<void>;
 }

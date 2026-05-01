@@ -298,6 +298,10 @@ export abstract class BaseProvider {
 
   abstract sendPrompt(prompt: string, options?: ProviderOptions): Promise<void>;
 
+  getRemainingTurnTimeMs(): number | null {
+    return null;
+  }
+
   async deleteSession(): Promise<void> {
     this.dispose();
   }

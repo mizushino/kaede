@@ -59,6 +59,10 @@ export class ClaudeAgent implements Agent {
     this.provider.sendToTerminal(text);
   }
 
+  getRemainingTurnTimeMs(): number | null {
+    return this.provider.getRemainingTurnTimeMs();
+  }
+
   async processMessage(message: IncomingMessage, attachments: string[], files: string[] = []): Promise<void> {
     this.queue.push({ message, attachments, files });
     await this.syncPendingQueueSnapshot();
