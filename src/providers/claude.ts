@@ -407,6 +407,7 @@ export class ClaudeCodeProvider extends BaseProvider {
 
         if (normalizedToolName === 'send_message') {
           state.sentDiscordMessage = true;
+          this.context.messenger.stopTyping();
         }
 
         this.context.messenger.setStatus(this.formatToolStatus(normalizedToolName, detail || undefined));
@@ -674,6 +675,7 @@ export class ClaudeCodeProvider extends BaseProvider {
 
       if (normalized === 'send_message') {
         state.sentDiscordMessage = true;
+        this.context.messenger.stopTyping();
         continue;
       }
 
