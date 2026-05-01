@@ -51,7 +51,15 @@ npm install
 cp .env.claude .env
 ```
 
-### 6. GitHub トークンの設定
+### 6. AI Provider の認証設定
+
+利用する Provider に応じて、以下のいずれかを設定してください。
+
+#### GitHub Copilot を使う場合（`AI_PROVIDER=copilot`）
+
+以下のいずれかの方法で認証します:
+
+**方法 A: Personal Access Token（推奨）**
 
 [GitHub Personal Access Tokens](https://github.com/settings/personal-access-tokens/new) で新しいトークンを作成し、以下の権限を付与してください:
 
@@ -59,6 +67,32 @@ cp .env.claude .env
 - **Copilot Requests**
 
 生成したトークンを `.env` の `GITHUB_TOKEN` に設定します。
+
+**方法 B: `gh auth login`**
+
+`gh` CLI でログイン済みであれば、Copilot SDK はその認証情報を自動で利用できます。
+
+> ⚠️ **注意:** `gh auth login` の標準フローではアカウント全体の権限（リポジトリ操作・Issue・PR など）が `gh` に付与されます。最小権限で運用したい場合は方法 A（Copilot Chat / Copilot Requests のみの PAT）を推奨します。
+
+#### Claude を使う場合（`AI_PROVIDER=claude`）
+
+以下のいずれかの方法で認証します:
+
+**方法 A: Claude Code でログイン済み**
+
+Claude Codeをインストールして起動し、ログインを済ませておけば、Claude Agent SDK は同じ認証情報を再利用します。
+
+```sh
+claude   # 起動して画面の指示に従いログイン
+```
+
+**方法 B: API キー**
+
+Anthropic Console で発行した API キーを `.env` の `ANTHROPIC_API_KEY` に設定します。
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
 ### 7. Discord Bot の作成
 
