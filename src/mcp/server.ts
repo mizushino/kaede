@@ -375,11 +375,18 @@ class KaedeMcpServer {
       const finalize = (summary: string, payload: Record<string, unknown>) => {
         if (settled) return;
         settled = true;
-        if (timer) clearTimeout(timer);
-        reactionCollector?.stop('settled');
-        messageCollector.stop('settled');
-        void promptMessage.reactions.removeAll().catch(() => {});
-        void promptMessage.edit(`${prompt}\n\n**→ ${summary}**`).catch(() => {});
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        try {
+          reactionCollector?.stop('settled');
+          messageCollector.stop('settled');
+          void promptMessage.reactions.removeAll().catch(() => {});
+          void promptMessage.edit(`${prompt}\n\n**→ ${summary}**`).catch(() => {});
+        } catch (err) {
+          void err;
+        }
         resolve({
           header: question.header,
           question: question.question,

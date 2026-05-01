@@ -220,11 +220,19 @@ export class DiscordMessenger extends Messenger {
       const finalize = (result: { answer: string; wasFreeform: boolean }, displaySuffix: string) => {
         if (settled) return;
         settled = true;
-        if (timer) clearTimeout(timer);
-        reactionCollector?.stop('settled');
-        messageCollector?.stop('settled');
-        void msg.reactions.removeAll().catch(() => {});
-        void msg.edit(prompt + displaySuffix).catch(() => {});
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        try {
+          reactionCollector?.stop('settled');
+          messageCollector?.stop('settled');
+          void msg.reactions.removeAll().catch(() => {});
+          void msg.edit(prompt + displaySuffix).catch(() => {});
+        } catch (err) {
+          // Resolve regardless so callers don't hang on cleanup failures.
+          void err;
+        }
         resolve(result);
       };
 

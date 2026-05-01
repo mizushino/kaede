@@ -287,6 +287,7 @@ export class ClaudeCodeProvider extends BaseProvider {
     const queryOptions = await this.buildQueryOptions(options, abortController, modelOverride, allowResume, state);
     const stream = query({ prompt, options: queryOptions });
     this.activeQuery = stream;
+    try {
 
     let authError: string | null = null;
     let resultError: string | null = null;
@@ -363,6 +364,12 @@ export class ClaudeCodeProvider extends BaseProvider {
 
     if (!sawResult) {
       throw new Error('claude query ended without a result');
+    }
+    } finally {
+      if (this.activeQuery === stream) {
+        this.activeQuery?.close();
+        this.activeQuery = undefined;
+      }
     }
   }
 

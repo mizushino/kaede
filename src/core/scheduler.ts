@@ -76,7 +76,17 @@ export class Scheduler {
       if (!taskDirty) continue;
 
       if (entry.enabled) {
-        this.startTask(entry);
+        if (!cron.validate(entry.cron)) {
+          logger.error(`[Scheduler] Skipping entry "${entry.id}" with invalid cron: ${entry.cron}`);
+          this.stopTask(entry.id);
+          continue;
+        }
+        try {
+          this.startTask(entry);
+        } catch (err) {
+          logger.error(`[Scheduler] Failed to start task "${entry.id}":`, err);
+          this.stopTask(entry.id);
+        }
       } else {
         this.stopTask(entry.id);
       }
