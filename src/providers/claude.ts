@@ -4,7 +4,7 @@ import { createRequire } from 'module';
 import path from 'path';
 import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { BaseProvider } from './provider.js';
-import type { ProviderOptions } from './provider.js';
+import type { ElicitationSchema, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
 import { getClaudeDiscordAllowedTools } from '../core/tool_contract.js';
 
@@ -43,20 +43,6 @@ function resolveClaudeBinary(): string | undefined {
 
 const CLI_SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
 const USER_RESPONSE_TIMEOUT = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
-
-type JsonSchemaProperty = {
-  title?: string;
-  description?: string;
-  type?: string;
-  enum?: string[];
-  default?: unknown;
-  oneOf?: Array<{ const?: string; title?: string }>;
-};
-
-type JsonSchemaShape = {
-  properties?: Record<string, JsonSchemaProperty>;
-  required?: string[];
-};
 
 export class ClaudeCodeProvider extends BaseProvider {
   readonly name = 'claude';
@@ -358,57 +344,11 @@ export class ClaudeCodeProvider extends BaseProvider {
         }
 
         const schema = this.toJsonSchemaShape(request.requestedSchema);
-        const fields = schema.properties ?? {};
-        const requiredFields = new Set(schema.required ?? []);
-        const fieldNames = Object.keys(fields);
-
-        if (fieldNames.length === 0) {
-          const approved = await this.context.messenger.requestApproval(request.message, USER_RESPONSE_TIMEOUT);
-          return approved ? { action: 'accept' } : { action: 'decline' };
+        const outcome = await this.runElicitation(request.message, schema, USER_RESPONSE_TIMEOUT);
+        if (outcome.action === 'accept') {
+          return { action: 'accept', content: outcome.content };
         }
-
-        const content: Record<string, string | number | boolean> = {};
-
-        for (const fieldName of fieldNames) {
-          const field = fields[fieldName];
-          const title = field.title ?? fieldName;
-          const description = field.description ? `\n${field.description}` : '';
-          const required = requiredFields.has(fieldName);
-          const suffix = required ? ' (必須)' : ' (任意)';
-          const prompt = `${request.message}\n\n**${title}**${suffix}${description}`;
-
-          if (field.type === 'boolean') {
-            content[fieldName] = await this.context.messenger.requestApproval(prompt, USER_RESPONSE_TIMEOUT);
-            continue;
-          }
-
-          if (Array.isArray(field.enum) && field.enum.length > 0) {
-            const { answer } = await this.context.messenger.requestUserInput(prompt, field.enum, true);
-            if (!answer && required) return { action: 'cancel' };
-            content[fieldName] = answer || this.stringDefault(field.default);
-            continue;
-          }
-
-          if (Array.isArray(field.oneOf) && field.oneOf.length > 0) {
-            const choices = field.oneOf.map(option => option.title ?? option.const ?? '').filter(Boolean);
-            const { answer } = await this.context.messenger.requestUserInput(prompt, choices, true);
-            if (!answer && required) return { action: 'cancel' };
-            const selected = field.oneOf.find(option => (option.title ?? option.const ?? '') === answer);
-            content[fieldName] = selected?.const ?? answer ?? this.stringDefault(field.default);
-            continue;
-          }
-
-          const { answer } = await this.context.messenger.requestUserInput(prompt);
-          if (!answer && required) return { action: 'cancel' };
-
-          if (field.type === 'number' || field.type === 'integer') {
-            content[fieldName] = Number(answer || field.default || 0);
-          } else {
-            content[fieldName] = answer || this.stringDefault(field.default);
-          }
-        }
-
-        return { action: 'accept', content };
+        return { action: outcome.action };
       },
       ...sessionOptions,
     };
@@ -548,84 +488,6 @@ export class ClaudeCodeProvider extends BaseProvider {
     return result;
   }
 
-  private normalizeToolName(toolName: string): string {
-    if (toolName.startsWith('mcp__discord__')) {
-      return toolName.slice('mcp__discord__'.length);
-    }
-
-    switch (toolName) {
-      case 'Bash':
-        return 'bash';
-      case 'Read':
-      case 'View':
-        return 'view';
-      case 'Edit':
-      case 'MultiEdit':
-      case 'Write':
-        return 'edit';
-      case 'Glob':
-        return 'glob';
-      case 'Grep':
-      case 'Search':
-        return 'grep';
-      case 'WebFetch':
-      case 'WebSearch':
-        return 'web_fetch';
-      case 'Task':
-        return 'report_intent';
-      default:
-        return toolName;
-    }
-  }
-
-  private formatToolDetail(toolName: string, input: Record<string, unknown>): string {
-    const readString = (...keys: string[]): string => {
-      for (const key of keys) {
-        const value = input[key];
-        if (typeof value === 'string' && value.trim()) return value.trim();
-      }
-      return '';
-    };
-
-    switch (toolName) {
-      case 'bash':
-        return readString('command');
-      case 'view':
-      case 'edit':
-        return readString('file_path', 'path');
-      case 'glob':
-      case 'grep':
-        return readString('pattern');
-      case 'web_fetch':
-        return readString('url');
-      case 'send_message':
-        return readString('content').slice(0, 120);
-      case 'ask_user':
-        return readString('question', 'channelId');
-      case 'list_funcs':
-        return '';
-      case 'read_func':
-      case 'write_func':
-      case 'delete_func':
-        return readString('filename');
-      case 'run_func':
-        return `${readString('filename')}${input.tool ? `:${String(input.tool)}` : ''}`;
-      case 'schedule_add':
-        return readString('cron', 'description', 'prompt');
-      case 'schedule_remove':
-      case 'schedule_toggle':
-        return readString('id');
-      case 'schedule_list':
-        return '';
-      case 'get_messages':
-      case 'get_channels':
-      case 'get_servers':
-        return readString('channelId', 'serverId');
-      default:
-        return '';
-    }
-  }
-
   private buildPermissionPrompt(
     toolName: string,
     input: Record<string, unknown>,
@@ -682,12 +544,12 @@ export class ClaudeCodeProvider extends BaseProvider {
     }
   }
 
-  private toJsonSchemaShape(value: unknown): JsonSchemaShape {
+  private toJsonSchemaShape(value: unknown): ElicitationSchema {
     if (!value || typeof value !== 'object') {
       return {};
     }
 
-    const candidate = value as JsonSchemaShape;
+    const candidate = value as ElicitationSchema;
     return {
       properties: candidate.properties,
       required: Array.isArray(candidate.required) ? candidate.required : [],
@@ -720,9 +582,5 @@ export class ClaudeCodeProvider extends BaseProvider {
     const raw = (options?.reasoningEffort || process.env.REASONING_EFFORT || '').trim().toLowerCase();
     if (raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'xhigh') return raw;
     return undefined;
-  }
-
-  private stringDefault(value: unknown): string {
-    return typeof value === 'string' ? value : '';
   }
 }

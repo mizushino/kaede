@@ -1,5 +1,6 @@
 import { CopilotClientManager } from '../core/client.js';
 import type { ToolContext } from '../core/tools.js';
+import type { Agent } from '../core/bot.js';
 import { FunctionLoader } from '../core/functions.js';
 import { Inbox, QueuedMessage, IncomingMessage } from '../core/inbox.js';
 import type { Messenger } from '../core/messenger.js';
@@ -11,7 +12,7 @@ import { CopilotCodeProvider, DEFAULT_REASONING_EFFORT, type CopilotSendErrorAct
 
 const MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 
-export class CopilotAgent implements ToolContext {
+export class CopilotAgent implements Agent, ToolContext {
 	model: string;
 	reasoningEffort: ReasoningEffort | '';
 	messenger: Messenger;

@@ -1,5 +1,5 @@
 import { CopilotSession } from '@github/copilot-sdk';
-import type { ElicitationContext, ElicitationFieldValue, ElicitationResult } from '@github/copilot-sdk';
+import type { ElicitationContext, ElicitationResult } from '@github/copilot-sdk';
 import path from 'path';
 import { CopilotClientManager } from '../core/client.js';
 import { FunctionLoader } from '../core/functions.js';
@@ -176,48 +176,11 @@ export class CopilotCodeProvider extends BaseProvider {
 			onPermissionRequest: createPermissionHandler(this.context.messenger, this.context.permissionConfig),
 			onElicitationRequest: async (context: ElicitationContext): Promise<ElicitationResult> => {
 				const { message, requestedSchema } = context;
-				const fields = requestedSchema?.properties ?? {};
-				const requiredFields = requestedSchema?.required ?? [];
-				const fieldNames = Object.keys(fields);
-
-				if (fieldNames.length === 0) {
-					const confirmed = await this.context.messenger.requestApproval(message, USER_RESPONSE_TIMEOUT);
-					return { action: confirmed ? 'accept' : 'decline' };
+				const outcome = await this.runElicitation(message, requestedSchema ?? {}, USER_RESPONSE_TIMEOUT);
+				if (outcome.action === 'accept') {
+					return { action: 'accept', content: outcome.content };
 				}
-
-				const content: Record<string, ElicitationFieldValue> = {};
-				for (const fieldName of fieldNames) {
-					const field = fields[fieldName];
-					const title = field.title ?? fieldName;
-					const desc = field.description ? `\n${field.description}` : '';
-					const isRequired = requiredFields.includes(fieldName);
-					const reqLabel = isRequired ? ' (必須)' : ' (任意)';
-
-					if (field.type === 'boolean') {
-						const confirmed = await this.context.messenger.requestApproval(`${message}\n\n**${title}**${reqLabel}${desc}`, USER_RESPONSE_TIMEOUT);
-						content[fieldName] = confirmed;
-					} else if (field.type === 'string' && 'enum' in field && field.enum) {
-						const { answer } = await this.context.messenger.requestUserInput(`${message}\n\n**${title}**${reqLabel}${desc}`, field.enum, true);
-						if (!answer && isRequired) return { action: 'cancel' };
-						content[fieldName] = answer || (field.default as string) || '';
-					} else if (field.type === 'string' && 'oneOf' in field && field.oneOf) {
-						const choices = field.oneOf.map((option: { const: string; title: string }) => option.title);
-						const { answer } = await this.context.messenger.requestUserInput(`${message}\n\n**${title}**${reqLabel}${desc}`, choices, true);
-						if (!answer && isRequired) return { action: 'cancel' };
-						const selected = field.oneOf.find((option: { const: string; title: string }) => option.title === answer);
-						content[fieldName] = selected?.const ?? answer ?? (field.default as string) ?? '';
-					} else {
-						const { answer } = await this.context.messenger.requestUserInput(`${message}\n\n**${title}**${reqLabel}${desc}`);
-						if (!answer && isRequired) return { action: 'cancel' };
-						if (field.type === 'number' || field.type === 'integer') {
-							content[fieldName] = Number(answer) || 0;
-						} else {
-							content[fieldName] = answer || (field.default as string) || '';
-						}
-					}
-				}
-
-				return { action: 'accept', content };
+				return { action: outcome.action };
 			},
 			onUserInputRequest: async (request: { question: string; choices?: string[]; allowFreeform?: boolean }) => {
 				const { answer, wasFreeform } = await this.context.messenger.requestUserInput(
@@ -300,7 +263,7 @@ IMPORTANT RULES:
 	private setupEventHandlers(session: CopilotSession): void {
 		session.on('tool.execution_start', (event: any) => {
 			const toolName = event?.data?.toolName || '';
-			const args = event?.data?.parameters || event?.data?.arguments || event?.data?.args || {};
+			const args = (event?.data?.parameters || event?.data?.arguments || event?.data?.args || {}) as Record<string, unknown>;
 			const detail = this.formatToolDetail(toolName, args);
 			logger.log(`[${this.context.getModel()}] tool: ${toolName}${detail ? ` | ${detail}` : ''}`);
 			if (toolName !== 'send_message') {
@@ -312,40 +275,6 @@ IMPORTANT RULES:
 			this.context.messenger.clearStatus();
 			this.context.messenger.stopTyping();
 		});
-	}
-
-	private formatToolDetail(tool: string, args: Record<string, any>): string {
-		const value = (key: string) => args[key] ? String(args[key]).slice(0, 120) : '';
-		switch (tool) {
-			case 'bash':
-				return value('command');
-			case 'view':
-			case 'create':
-			case 'edit':
-				return value('path');
-			case 'glob':
-			case 'grep':
-				return value('pattern');
-			case 'web_fetch':
-				return value('url');
-			case 'write_func':
-			case 'read_func':
-			case 'delete_func':
-				return value('filename');
-			case 'run_func':
-				return `${args.filename || ''}${args.tool ? `:${args.tool}` : ''}`;
-			case 'send_message':
-				return args.content ? String(args.content).slice(0, 120) : '';
-			case 'get_messages':
-				return value('channelId');
-			case 'schedule_add':
-				return `${args.cron || ''} → ${args.description || String(args.prompt || '').slice(0, 60)}`;
-			case 'schedule_remove':
-			case 'schedule_toggle':
-				return value('id');
-			default:
-				return Object.keys(args).length ? JSON.stringify(args).slice(0, 120) : '';
-		}
 	}
 }
 
