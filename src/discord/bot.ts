@@ -262,44 +262,52 @@ export class DiscordBot extends Bot {
 
     if (interaction.commandName === 'restart') {
       const envName = interaction.options.getString('env')?.trim() ?? '';
-      const projectRoot = path.resolve(this.workspaceDir, '..');
-      const currentEnvFile = path.join(projectRoot, '.current-env');
-      const ecosystemConfig = path.join(projectRoot, 'ecosystem.config.cjs');
 
-      if (envName === 'default') {
-        // Reset to default .env
-        await interaction.reply('🔄 Resetting to `.env` and restarting...');
-        try {
-          const { unlink } = await import('fs/promises');
-          const { existsSync } = await import('fs');
-          if (existsSync(currentEnvFile)) await unlink(currentEnvFile);
-          execSync(`nohup bash -c 'sleep 1 && pm2 startOrRestart ${ecosystemConfig} && pm2 save' > /dev/null 2>&1 &`, { stdio: 'pipe' });
-        } catch (err) {
-          logger.error('[BOT] Failed to reset env:', err);
-        }
-      } else if (envName) {
-        // Switch env and restart via pm2 startOrRestart
-        const targetFile = `.env.${envName}`;
-        const targetPath = path.join(projectRoot, targetFile);
-        const { existsSync } = await import('fs');
-        if (!existsSync(targetPath)) {
-          await interaction.reply({ content: `❌ \`${targetFile}\` not found`, ephemeral: true });
-          return;
-        }
-        await interaction.reply(`🔄 Switching to \`${targetFile}\` and restarting...`);
-        try {
-          const { writeFile } = await import('fs/promises');
-          await writeFile(currentEnvFile, targetFile, 'utf-8');
-          execSync(`nohup bash -c 'sleep 1 && pm2 startOrRestart ${ecosystemConfig} && pm2 save' > /dev/null 2>&1 &`, { stdio: 'pipe' });
-        } catch (err) {
-          logger.error('[BOT] Failed to switch env:', err);
-        }
-      } else {
+      if (!envName) {
         // Simple restart with current env
         this.counter.flush();
         await interaction.reply('🔄 Restarting...');
         logger.log('[BOT] Restart requested via slash command');
         setTimeout(() => process.exit(0), 1000);
+        return;
+      }
+
+      const SAFE_NAME = /^[a-zA-Z0-9._-]+$/;
+      const pm2AppName = process.env.name?.trim() || 'kaede';
+      if (!SAFE_NAME.test(pm2AppName)) {
+        await interaction.reply({ content: `❌ Unsafe pm2 app name: \`${pm2AppName}\``, ephemeral: true });
+        return;
+      }
+
+      let agentValue = '';
+      let label = 'default `.env`';
+      if (envName !== 'default') {
+        if (!SAFE_NAME.test(envName)) {
+          await interaction.reply({ content: `❌ Invalid env name: \`${envName}\``, ephemeral: true });
+          return;
+        }
+        const targetFile = `.env.${envName}`;
+        const projectRoot = path.resolve(this.workspaceDir, '..');
+        const { existsSync } = await import('fs');
+        if (!existsSync(path.join(projectRoot, targetFile))) {
+          await interaction.reply({ content: `❌ \`${targetFile}\` not found`, ephemeral: true });
+          return;
+        }
+        agentValue = envName;
+        label = `\`${targetFile}\``;
+      }
+
+      this.counter.flush();
+      await interaction.reply(`🔄 Restarting \`${pm2AppName}\` with ${label}...`);
+      try {
+        // Only restart this app and refresh its env so other PM2 apps stay
+        // untouched. `npm start` reads AGENT and loads .env.<AGENT>.
+        execSync(
+          `nohup bash -c 'sleep 1 && AGENT=${agentValue} pm2 restart ${pm2AppName} --update-env' > /dev/null 2>&1 &`,
+          { stdio: 'pipe' },
+        );
+      } catch (err) {
+        logger.error('[BOT] Failed to restart with env switch:', err);
       }
       return;
     }
