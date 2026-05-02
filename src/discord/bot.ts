@@ -9,12 +9,15 @@ import {
   AutocompleteInteraction,
 } from 'discord.js';
 import path from 'path';
+import { execSync } from 'child_process';
 import { ClaudeCodeProvider } from '../providers/claude.js';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
 import { PromptLoader } from '../core/prompts.js';
 import { logger } from '../core/logger.js';
+
+const ENV_SWITCH_IGNORED = new Set(['claude', 'copilot']);
 
 export class DiscordBot extends Bot {
   readonly discord: Client;
@@ -63,7 +66,12 @@ export class DiscordBot extends Bot {
         .setDescription('Show request usage statistics'),
       new SlashCommandBuilder()
         .setName('restart')
-        .setDescription('Restart the bot process'),
+        .setDescription('Restart the bot process, optionally switching the .env file')
+        .addStringOption(opt =>
+          opt.setName('env')
+            .setDescription('Env name to switch to (e.g. "kaede" for .env.kaede). Omit to restart with current env.')
+            .setRequired(false)
+            .setAutocomplete(true)),
       new SlashCommandBuilder()
         .setName('model')
         .setDescription('View or switch the AI model')
@@ -184,6 +192,24 @@ export class DiscordBot extends Bot {
       } catch {
         await interaction.respond([]);
       }
+    } else if (interaction.commandName === 'restart') {
+      try {
+        const { readdir } = await import('fs/promises');
+        const projectRoot = path.resolve(this.workspaceDir, '..');
+        const allFiles = await readdir(projectRoot);
+        const envFiles = allFiles.filter(f => /^\.env\..+/.test(f));
+        const envChoices = envFiles
+          .map(f => {
+            const envName = f.replace(/^\.env\./, '');
+            return { name: envName, value: envName };
+          })
+          .filter(c => !ENV_SWITCH_IGNORED.has(c.value) && c.value.toLowerCase().includes(focused));
+        const defaultChoice = { name: 'default (.env)', value: 'default' };
+        const choices = (defaultChoice.name.toLowerCase().includes(focused) ? [defaultChoice, ...envChoices] : envChoices).slice(0, 25);
+        await interaction.respond(choices);
+      } catch {
+        await interaction.respond([]);
+      }
     }
   }
 
@@ -235,10 +261,54 @@ export class DiscordBot extends Bot {
     }
 
     if (interaction.commandName === 'restart') {
+      const envName = interaction.options.getString('env')?.trim() ?? '';
+
+      if (!envName) {
+        // Simple restart with current env
+        this.counter.flush();
+        await interaction.reply('🔄 Restarting...');
+        logger.log('[BOT] Restart requested via slash command');
+        setTimeout(() => process.exit(0), 1000);
+        return;
+      }
+
+      const SAFE_NAME = /^[a-zA-Z0-9._-]+$/;
+      const pm2AppName = process.env.name?.trim() || 'kaede';
+      if (!SAFE_NAME.test(pm2AppName)) {
+        await interaction.reply({ content: `❌ Unsafe pm2 app name: \`${pm2AppName}\``, ephemeral: true });
+        return;
+      }
+
+      let agentValue = '';
+      let label = 'default `.env`';
+      if (envName !== 'default') {
+        if (!SAFE_NAME.test(envName)) {
+          await interaction.reply({ content: `❌ Invalid env name: \`${envName}\``, ephemeral: true });
+          return;
+        }
+        const targetFile = `.env.${envName}`;
+        const projectRoot = path.resolve(this.workspaceDir, '..');
+        const { existsSync } = await import('fs');
+        if (!existsSync(path.join(projectRoot, targetFile))) {
+          await interaction.reply({ content: `❌ \`${targetFile}\` not found`, ephemeral: true });
+          return;
+        }
+        agentValue = envName;
+        label = `\`${targetFile}\``;
+      }
+
       this.counter.flush();
-      await interaction.reply('🔄 Restarting...');
-      logger.log('[BOT] Restart requested via slash command');
-      setTimeout(() => process.exit(0), 1000);
+      await interaction.reply(`🔄 Restarting \`${pm2AppName}\` with ${label}...`);
+      try {
+        // Only restart this app and refresh its env so other PM2 apps stay
+        // untouched. `npm start` reads AGENT and loads .env.<AGENT>.
+        execSync(
+          `nohup bash -c 'sleep 1 && AGENT=${agentValue} pm2 restart ${pm2AppName} --update-env' > /dev/null 2>&1 &`,
+          { stdio: 'pipe' },
+        );
+      } catch (err) {
+        logger.error('[BOT] Failed to restart with env switch:', err);
+      }
       return;
     }
 

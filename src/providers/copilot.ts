@@ -1,5 +1,6 @@
 import { CopilotSession } from '@github/copilot-sdk';
 import type { ElicitationContext, ElicitationResult } from '@github/copilot-sdk';
+import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import type { CopilotClientManager } from '../core/client.js';
 import { FunctionLoader } from '../core/functions.js';
@@ -222,7 +223,7 @@ IMPORTANT RULES:
 - ALWAYS use the send_message tool to send responses. Never output text directly without calling send_message.
 - When you need clarification or want the user to choose from options, use the built-in user input flow instead of only describing a question in plain text.
 - ALWAYS call wait_messages after every response, even if you have nothing to say. This keeps you online and ready for the next message.
-- Do not end the session without calling wait_messages.`,
+- Do not end the session without calling wait_messages.${this.buildAgentsMdAppend()}`,
 			},
 		};
 
@@ -282,6 +283,26 @@ IMPORTANT RULES:
 			this.context.messenger.clearStatus();
 			this.context.messenger.stopTyping();
 		});
+	}
+
+	private buildAgentsMdAppend(): string {
+		const agentsMdPath = process.env.AGENTS_MD_PATH?.trim();
+		if (!agentsMdPath) return '';
+
+		const resolvedPath = path.resolve(agentsMdPath);
+		if (!existsSync(resolvedPath)) {
+			logger.error(`[COPILOT] AGENTS_MD_PATH not found: ${resolvedPath}`);
+			return '';
+		}
+
+		try {
+			const content = readFileSync(resolvedPath, 'utf8');
+			logger.log(`[COPILOT] Using custom AGENTS.md from: ${resolvedPath}`);
+			return `\n\n${content}`;
+		} catch (err) {
+			logger.error(`[COPILOT] Failed to read AGENTS_MD_PATH: ${err}`);
+			return '';
+		}
 	}
 }
 
