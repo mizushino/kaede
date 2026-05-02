@@ -1,8 +1,8 @@
-import { createHash, randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
-import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query } from '@anthropic-ai/claude-agent-sdk';
+import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { BaseProvider } from './provider.js';
 import type { ElicitationSchema, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
@@ -48,6 +48,67 @@ interface QueryState {
   sentDiscordMessage: boolean;
 }
 
+interface PendingTurn {
+  resolve: () => void;
+  reject: (err: Error) => void;
+  state: QueryState;
+  authError: string | null;
+  resultError: string | null;
+  sawResult: boolean;
+}
+
+class PromptQueue implements AsyncIterable<SDKUserMessage> {
+  private buffer: SDKUserMessage[] = [];
+  private resolvers: Array<(r: IteratorResult<SDKUserMessage>) => void> = [];
+  private closed = false;
+
+  push(msg: SDKUserMessage): void {
+    if (this.closed) return;
+    const r = this.resolvers.shift();
+    if (r) {
+      r({ value: msg, done: false });
+    } else {
+      this.buffer.push(msg);
+    }
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const r of this.resolvers) {
+      r({ value: undefined as unknown as SDKUserMessage, done: true });
+    }
+    this.resolvers = [];
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
+    return {
+      next: (): Promise<IteratorResult<SDKUserMessage>> => {
+        if (this.buffer.length > 0) {
+          return Promise.resolve({ value: this.buffer.shift()!, done: false });
+        }
+        if (this.closed) {
+          return Promise.resolve({ value: undefined as unknown as SDKUserMessage, done: true });
+        }
+        return new Promise<IteratorResult<SDKUserMessage>>(resolve => {
+          this.resolvers.push(resolve);
+        });
+      },
+    };
+  }
+}
+
+function buildUserMessage(prompt: string): SDKUserMessage {
+  return {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: prompt,
+    },
+    parent_tool_use_id: null,
+  };
+}
+
 export class ClaudeCodeProvider extends BaseProvider {
   readonly name = 'claude';
 
@@ -84,8 +145,12 @@ export class ClaudeCodeProvider extends BaseProvider {
     }
   }
 
-  private activeQuery?: Query;
-  private activeAbortController?: AbortController;
+  private activeStream?: Query;
+  private streamQueue?: PromptQueue;
+  private streamReader?: Promise<void>;
+  private streamSignature?: string;
+  private streamDead = false;
+  private currentTurn?: PendingTurn;
   private currentSessionId?: string;
   private timedOut = false;
 
@@ -195,7 +260,7 @@ export class ClaudeCodeProvider extends BaseProvider {
 
   sendToTerminal(text: string): void {
     if (text.includes('\u0003') || text.includes('\x03')) {
-      void this.activeQuery?.interrupt().catch(err => {
+      void this.activeStream?.interrupt().catch(err => {
         logger.error(`[${this.name}] Failed to interrupt query:`, err);
       });
       return;
@@ -206,10 +271,7 @@ export class ClaudeCodeProvider extends BaseProvider {
 
   dispose(): void {
     this.timedOut = false;
-    this.activeAbortController?.abort();
-    this.activeAbortController = undefined;
-    this.activeQuery?.close();
-    this.activeQuery = undefined;
+    this.tearDownStream(new Error('claude provider disposed'));
     this.currentSessionId = undefined;
     super.dispose();
   }
@@ -233,20 +295,12 @@ export class ClaudeCodeProvider extends BaseProvider {
   async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
     this.timedOut = false;
 
-    const abortController = new AbortController();
-    this.activeAbortController = abortController;
-
-    const timeout = setTimeout(() => {
-      this.timedOut = true;
-      abortController.abort();
-      this.activeQuery?.close();
-    }, CLI_SESSION_TIMEOUT);
+    const requestedModel = options?.model?.trim() || undefined;
+    const requestedEffort = this.resolveEffort(options);
 
     try {
-      const requestedModel = options?.model?.trim() || undefined;
-
       try {
-        await this.executeQuery(prompt, options, abortController, requestedModel, true);
+        await this.runTurn(prompt, options, requestedModel, requestedEffort);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (!requestedModel || !this.isModelSelectionErrorMessage(message)) {
@@ -254,7 +308,8 @@ export class ClaudeCodeProvider extends BaseProvider {
         }
 
         logger.log(`[${this.name}] Model ${requestedModel} was rejected by Claude at runtime; retrying with the default model`);
-        await this.executeQuery(prompt, options, abortController, undefined, false);
+        this.tearDownStream(new Error('claude model rejected; restarting stream'));
+        await this.runTurn(prompt, options, undefined, requestedEffort);
       }
     } catch (err) {
       if (this.timedOut) {
@@ -262,132 +317,253 @@ export class ClaudeCodeProvider extends BaseProvider {
       }
       throw err;
     } finally {
-      clearTimeout(timeout);
-      this.activeQuery?.close();
-      this.activeQuery = undefined;
-      this.activeAbortController = undefined;
       this.context.messenger.clearStatus();
       this.context.messenger.stopTyping();
     }
   }
 
-  private async executeQuery(
+  private async runTurn(
     prompt: string,
     options: ProviderOptions | undefined,
-    abortController: AbortController,
     modelOverride: string | undefined,
-    allowResume: boolean,
+    effort: 'low' | 'medium' | 'high' | 'xhigh' | undefined,
   ): Promise<void> {
-    const state: QueryState = { sentDiscordMessage: false };
+    const signature = this.computeStreamSignature(modelOverride, effort);
+    if (this.streamSignature && this.streamSignature !== signature) {
+      logger.log(`[${this.name}] Stream signature changed (${this.streamSignature} -> ${signature}); restarting stream`);
+      this.tearDownStream(new Error('claude stream signature changed'));
+    }
 
-    const queryOptions = await this.buildQueryOptions(options, abortController, modelOverride, allowResume, state);
-    const stream = query({ prompt, options: queryOptions });
-    this.activeQuery = stream;
+    await this.ensureStream(options, modelOverride, effort, signature);
+
+    const stream = this.activeStream;
+    const queue = this.streamQueue;
+    if (!stream || !queue) {
+      throw new Error('claude stream is not available');
+    }
+
+    if (this.currentTurn) {
+      throw new Error('claude provider is already processing a turn');
+    }
+
+    const turnPromise = new Promise<void>((resolve, reject) => {
+      this.currentTurn = {
+        resolve,
+        reject,
+        state: { sentDiscordMessage: false },
+        authError: null,
+        resultError: null,
+        sawResult: false,
+      };
+    });
+
+    logger.log(`[${this.name}] Sending turn prompt (signature ${signature}):\n${prompt.slice(0, 300)}`);
+    queue.push(buildUserMessage(prompt));
+
+    let timedOutHere = false;
+    const timeout = setTimeout(() => {
+      timedOutHere = true;
+      this.timedOut = true;
+      void stream.interrupt().catch(err => {
+        logger.error(`[${this.name}] Failed to interrupt timed-out turn:`, err);
+      });
+    }, CLI_SESSION_TIMEOUT);
+
     try {
-
-    let authError: string | null = null;
-    let resultError: string | null = null;
-    let sawResult = false;
-
-    for await (const message of stream) {
-      this.currentSessionId = message.session_id;
-
-      if (message.type === 'auth_status') {
-        this.context.messenger.setStatus(`${this.getIcon()} Claude 認証待機中...`);
-        if (message.error) authError = message.error;
-        continue;
+      await turnPromise;
+    } catch (err) {
+      if (timedOutHere) {
+        this.tearDownStream(new Error('claude turn timed out'));
       }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 
-      if (message.type === 'assistant' && message.error) {
-        authError = this.describeAssistantError(message.error);
-        continue;
+  private computeStreamSignature(model: string | undefined, effort: string | undefined): string {
+    return `m=${model ?? ''}|e=${effort ?? ''}`;
+  }
+
+  private async ensureStream(
+    options: ProviderOptions | undefined,
+    modelOverride: string | undefined,
+    effort: 'low' | 'medium' | 'high' | 'xhigh' | undefined,
+    signature: string,
+  ): Promise<void> {
+    if (this.activeStream && !this.streamDead && this.streamSignature === signature) {
+      return;
+    }
+
+    if (this.activeStream || this.streamQueue || this.streamReader) {
+      this.tearDownStream(new Error('claude stream restart requested'));
+    }
+
+    const queryOptions = await this.buildQueryOptions(options, modelOverride, effort);
+    const queue = new PromptQueue();
+    const stream = query({ prompt: queue, options: queryOptions });
+
+    this.activeStream = stream;
+    this.streamQueue = queue;
+    this.streamSignature = signature;
+    this.streamDead = false;
+
+    this.streamReader = this.runReader(stream).finally(() => {
+      if (this.activeStream === stream) {
+        this.streamDead = true;
       }
+    });
+  }
 
-      if (message.type === 'assistant') {
-        this.handleAssistantToolUses(message, state);
-        continue;
+  private tearDownStream(err: Error): void {
+    if (this.currentTurn) {
+      const turn = this.currentTurn;
+      this.currentTurn = undefined;
+      turn.reject(err);
+    }
+    if (this.streamQueue) {
+      this.streamQueue.close();
+      this.streamQueue = undefined;
+    }
+    if (this.activeStream) {
+      try {
+        this.activeStream.close();
+      } catch {
+        /* ignore */
       }
+      this.activeStream = undefined;
+    }
+    this.streamReader = undefined;
+    this.streamSignature = undefined;
+    this.streamDead = false;
+  }
 
-      if (message.type === 'tool_use_summary') {
-        this.setDetectedStatus(message.summary);
-        continue;
-      }
-
-      if (message.type === 'tool_progress') {
-        const normalized = this.normalizeToolName(message.tool_name);
-        this.context.messenger.setStatus(this.formatToolStatus(normalized));
-        continue;
-      }
-
-      if (message.type === 'system') {
-        if (message.subtype === 'task_progress' && message.last_tool_name) {
-          this.context.messenger.setStatus(this.formatToolStatus(this.normalizeToolName(message.last_tool_name)));
-        } else if (message.subtype === 'task_updated') {
-          this.setDetectedStatus(message.patch.description);
-        } else if (message.subtype === 'notification' && message.priority !== 'low') {
-          this.setDetectedStatus(message.text);
-          logger.log(`[${this.name}] notification: ${message.text}`);
-        } else if (message.subtype === 'init') {
-          const failedServers = message.mcp_servers.filter(server => server.status === 'failed');
-          if (failedServers.length > 0) {
-            logger.log(`[${this.name}] MCP connection issues: ${failedServers.map(server => `${server.name}:${server.status}`).join(', ')}`);
-          }
+  private async runReader(stream: Query): Promise<void> {
+    try {
+      for await (const message of stream) {
+        if ('session_id' in message && typeof message.session_id === 'string') {
+          this.currentSessionId = message.session_id;
         }
-        continue;
-      }
 
-      if (message.type === 'result') {
-        sawResult = true;
-
-        if (message.subtype !== 'success') {
-          resultError = this.formatResultError(message.errors);
+        if (message.type === 'auth_status') {
+          this.context.messenger.setStatus(`${this.getIcon()} Claude 認証待機中...`);
+          if (message.error && this.currentTurn) {
+            this.currentTurn.authError = message.error;
+          }
           continue;
         }
 
-        if (!state.sentDiscordMessage && message.result.trim()) {
-          logger.log(`[${this.name}] Result completed without discord send_message tool usage`);
+        if (message.type === 'assistant' && (message as { error?: string }).error) {
+          if (this.currentTurn) {
+            this.currentTurn.authError = this.describeAssistantError((message as { error: string }).error);
+          }
+          continue;
+        }
+
+        if (message.type === 'assistant') {
+          if (this.currentTurn) {
+            this.handleAssistantToolUses(message, this.currentTurn.state);
+          }
+          continue;
+        }
+
+        if (message.type === 'tool_use_summary') {
+          this.setDetectedStatus((message as { summary?: string }).summary);
+          continue;
+        }
+
+        if (message.type === 'tool_progress') {
+          const normalized = this.normalizeToolName((message as { tool_name: string }).tool_name);
+          this.context.messenger.setStatus(this.formatToolStatus(normalized));
+          continue;
+        }
+
+        if (message.type === 'system') {
+          const sys = message as {
+            subtype?: string;
+            last_tool_name?: string;
+            patch?: { description?: string };
+            text?: string;
+            priority?: string;
+            mcp_servers?: Array<{ name: string; status: string }>;
+          };
+          if (sys.subtype === 'task_progress' && sys.last_tool_name) {
+            this.context.messenger.setStatus(this.formatToolStatus(this.normalizeToolName(sys.last_tool_name)));
+          } else if (sys.subtype === 'task_updated') {
+            this.setDetectedStatus(sys.patch?.description);
+          } else if (sys.subtype === 'notification' && sys.priority !== 'low') {
+            this.setDetectedStatus(sys.text);
+            logger.log(`[${this.name}] notification: ${sys.text}`);
+          } else if (sys.subtype === 'init') {
+            const failedServers = (sys.mcp_servers ?? []).filter(server => server.status === 'failed');
+            if (failedServers.length > 0) {
+              logger.log(`[${this.name}] MCP connection issues: ${failedServers.map(server => `${server.name}:${server.status}`).join(', ')}`);
+            }
+          }
+          continue;
+        }
+
+        if (message.type === 'result') {
+          const turn = this.currentTurn;
+          if (!turn) {
+            logger.log(`[${this.name}] Received result with no pending turn`);
+            continue;
+          }
+
+          turn.sawResult = true;
+          const res = message as { subtype?: string; errors?: string[]; result?: string };
+
+          if (res.subtype !== 'success') {
+            turn.resultError = this.formatResultError(res.errors ?? []);
+          } else if (!turn.state.sentDiscordMessage && (res.result ?? '').trim()) {
+            logger.log(`[${this.name}] Result completed without discord send_message tool usage`);
+          }
+
+          this.currentTurn = undefined;
+
+          if (turn.authError) {
+            turn.reject(new Error(turn.authError));
+          } else if (turn.resultError) {
+            turn.reject(new Error(turn.resultError));
+          } else {
+            turn.resolve();
+          }
+          continue;
         }
       }
-    }
 
-    if (authError) {
-      throw new Error(authError);
-    }
-
-    if (resultError) {
-      throw new Error(resultError);
-    }
-
-    if (!sawResult) {
-      throw new Error('claude query ended without a result');
-    }
-    } finally {
-      if (this.activeQuery === stream) {
-        this.activeQuery?.close();
-        this.activeQuery = undefined;
+      // Stream ended cleanly. If a turn is still pending, treat as failure.
+      if (this.currentTurn) {
+        const turn = this.currentTurn;
+        this.currentTurn = undefined;
+        turn.reject(new Error('claude query stream ended without a result'));
+      }
+    } catch (err) {
+      logger.error(`[${this.name}] Stream reader error:`, err);
+      if (this.currentTurn) {
+        const turn = this.currentTurn;
+        this.currentTurn = undefined;
+        turn.reject(err instanceof Error ? err : new Error(String(err)));
       }
     }
   }
 
   private async buildQueryOptions(
     options: ProviderOptions | undefined,
-    abortController: AbortController,
     modelOverride: string | undefined,
-    allowResume: boolean,
-    state: QueryState,
+    effort: 'low' | 'medium' | 'high' | 'xhigh' | undefined,
   ): Promise<Options> {
     const workspaceDir = path.resolve(this.context.workspaceDir);
     const permissionMode = this.getPermissionMode();
     const env = this.getEnvironmentVariables();
-    const sessionOptions = await this.resolveSessionOptions(workspaceDir, allowResume);
+    const sessionOptions = await this.resolveSessionOptions(workspaceDir);
     const claudeCommand = resolveClaudeBinary();
 
     return {
-      abortController,
       cwd: workspaceDir,
       env,
       model: modelOverride,
-      ...(this.resolveEffort(options) ? { effort: this.resolveEffort(options) } : {}),
+      ...(effort ? { effort } : {}),
       permissionMode,
       ...(permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       ...(claudeCommand ? { pathToClaudeCodeExecutable: claudeCommand } : {}),
@@ -402,8 +578,8 @@ export class ClaudeCodeProvider extends BaseProvider {
         const normalizedToolName = this.normalizeToolName(toolName);
         const detail = this.formatToolDetail(normalizedToolName, input);
 
-        if (normalizedToolName === 'send_message') {
-          state.sentDiscordMessage = true;
+        if (normalizedToolName === 'send_message' && this.currentTurn) {
+          this.currentTurn.state.sentDiscordMessage = true;
           this.context.messenger.stopTyping();
         }
 
@@ -455,13 +631,7 @@ export class ClaudeCodeProvider extends BaseProvider {
     };
   }
 
-  private async resolveSessionOptions(workspaceDir: string, allowResume: boolean): Promise<Pick<Options, 'resume' | 'sessionId'>> {
-    if (!allowResume) {
-      const sessionId = randomUUID();
-      this.currentSessionId = sessionId;
-      return { sessionId };
-    }
-
+  private async resolveSessionOptions(workspaceDir: string): Promise<Pick<Options, 'resume' | 'sessionId'>> {
     const sessionId = this.getStableSessionId();
     const existing = await getSessionInfo(sessionId, { dir: workspaceDir }).catch(() => undefined);
     if (existing) {
