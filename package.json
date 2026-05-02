@@ -5,10 +5,10 @@
   "description": "kaede - Discord Bot with GitHub Copilot SDK integration",
   "main": "src/index.ts",
   "scripts": {
-    "start": "tsx --env-file=.env${AGENT:+.$AGENT} src/index.ts",
+    "start": "tsx src/index.ts",
     "copilot": "AGENT=copilot npm start",
     "claude": "AGENT=claude npm start",
-    "mcp": "tsx --env-file=.env${AGENT:+.$AGENT} src/mcp/server.ts"
+    "mcp": "tsx src/mcp/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.126",

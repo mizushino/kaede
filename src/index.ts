@@ -1,3 +1,4 @@
+import './load-env.js';
 import { DiscordBot } from './discord/bot.js';
 import { logger } from './core/logger.js';
 
