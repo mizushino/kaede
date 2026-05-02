@@ -117,7 +117,7 @@ export abstract class BaseProvider {
       case 'ask_user':
         return readString('question', 'channelId');
       case 'list_funcs':
-      case 'schedule_list':
+      case 'list_schedules':
         return '';
       case 'read_func':
       case 'write_func':
@@ -128,13 +128,13 @@ export abstract class BaseProvider {
         const tool = typeof input.tool === 'string' ? input.tool : '';
         return `${filename}${tool ? `:${tool}` : ''}`;
       }
-      case 'schedule_add': {
+      case 'add_schedule': {
         const cron = readString('cron');
         const description = readString('description', 'prompt');
         return cron && description ? `${cron} → ${description}` : cron || description;
       }
-      case 'schedule_remove':
-      case 'schedule_toggle':
+      case 'remove_schedule':
+      case 'toggle_schedule':
         return readString('id');
       case 'get_messages':
       case 'get_channels':

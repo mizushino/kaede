@@ -168,14 +168,14 @@ class KaedeMcpServer {
             return this.getServers();
           case 'ask_user':
             return await this.askUser(request.params.arguments);
-          case 'schedule_add':
-            return await this.scheduleAdd(request.params.arguments);
-          case 'schedule_list':
-            return await this.scheduleList();
-          case 'schedule_remove':
-            return await this.scheduleRemove(request.params.arguments);
-          case 'schedule_toggle':
-            return await this.scheduleToggle(request.params.arguments);
+          case 'add_schedule':
+            return await this.addSchedule(request.params.arguments);
+          case 'list_schedules':
+            return await this.listSchedules();
+          case 'remove_schedule':
+            return await this.removeSchedule(request.params.arguments);
+          case 'toggle_schedule':
+            return await this.toggleSchedule(request.params.arguments);
           case 'list_funcs':
             return await this.listFuncs();
           case 'read_func':
@@ -486,7 +486,7 @@ class KaedeMcpServer {
     return [...selected];
   }
 
-  private async scheduleAdd(args: unknown) {
+  private async addSchedule(args: unknown) {
     const parsed = ScheduleAddSchema.parse(args);
     const schedules = await this.readSchedules();
     const entry: ScheduleEntry = {
@@ -506,14 +506,14 @@ class KaedeMcpServer {
     };
   }
 
-  private async scheduleList() {
+  private async listSchedules() {
     const schedules = await this.readSchedules();
     return {
       content: [{ type: 'text' as const, text: JSON.stringify({ schedules }, null, 2) }],
     };
   }
 
-  private async scheduleRemove(args: unknown) {
+  private async removeSchedule(args: unknown) {
     const parsed = ScheduleIdSchema.parse(args);
     const schedules = await this.readSchedules();
     const next = schedules.filter(entry => entry.id !== parsed.id);
@@ -524,7 +524,7 @@ class KaedeMcpServer {
     };
   }
 
-  private async scheduleToggle(args: unknown) {
+  private async toggleSchedule(args: unknown) {
     const parsed = ScheduleIdSchema.parse(args);
     const schedules = await this.readSchedules();
     const entry = schedules.find(item => item.id === parsed.id);

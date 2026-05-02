@@ -28,7 +28,7 @@ GitHub Copilot SDK / Claude Agent SDK を利用した Discord AI エージェン
 👉 https://github.com/cli/cli#installation
 
 (ClaudeCode) Claude Code のインストール
-👉 https://code.claude.com/docs/ja/setup
+👉 https://code.claude.com/docs/ja/overview
 
 ### 3. リポジトリのクローン
 
@@ -402,10 +402,10 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 
 | ツール | 説明 |
 |--------|------|
-| `schedule_add` | 📅 cronスケジュールの登録（タイムゾーン: Asia/Tokyo） |
-| `schedule_list` | 📋 登録済みスケジュールの一覧表示 |
-| `schedule_remove` | 🗑️ スケジュールの削除 |
-| `schedule_toggle` | ⏯️ スケジュールの有効/無効切り替え |
+| `add_schedule` | 📅 cronスケジュールの登録（タイムゾーン: Asia/Tokyo） |
+| `list_schedules` | 📋 登録済みスケジュールの一覧表示 |
+| `remove_schedule` | 🗑️ スケジュールの削除 |
+| `toggle_schedule` | ⏯️ スケジュールの有効/無効切り替え |
 
 自然言語で「毎朝9時にニュースをまとめて」と伝えると、AI がcron式に変換してスケジュール登録します。スケジュールは `workspace/schedules.json` に永続化され、再起動後も自動復元されます。
 

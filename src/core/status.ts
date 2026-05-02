@@ -13,10 +13,10 @@ export const STATUS_ICON: Record<string, string> = {
   read_func:    '📄',
   run_func:     '🚀',
   // Schedule management
-  schedule_add:    '📅',
-  schedule_list:   '📋',
-  schedule_remove: '🗑️',
-  schedule_toggle: '⏯️',
+  add_schedule:    '📅',
+  list_schedules:   '📋',
+  remove_schedule: '🗑️',
+  toggle_schedule: '⏯️',
   // Built-in: file operations
   view:           '📖',
   create:         '📝',

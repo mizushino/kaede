@@ -155,8 +155,8 @@ export const DISCORD_TOOL_CONTRACTS: ToolContract[] = [
     },
   },
   {
-    name: 'schedule_add',
-    promptSignature: 'mcp__discord__schedule_add(cron, channelId, prompt, description?, guildId?)',
+    name: 'add_schedule',
+    promptSignature: 'mcp__discord__add_schedule(cron, channelId, prompt, description?, guildId?)',
     description: 'Register a scheduled task that sends a message to a channel on a cron schedule (timezone: Asia/Tokyo).',
     inputSchema: {
       type: 'object',
@@ -171,14 +171,14 @@ export const DISCORD_TOOL_CONTRACTS: ToolContract[] = [
     },
   },
   {
-    name: 'schedule_list',
-    promptSignature: 'mcp__discord__schedule_list()',
+    name: 'list_schedules',
+    promptSignature: 'mcp__discord__list_schedules()',
     description: 'List all registered scheduled tasks.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'schedule_remove',
-    promptSignature: 'mcp__discord__schedule_remove(id)',
+    name: 'remove_schedule',
+    promptSignature: 'mcp__discord__remove_schedule(id)',
     description: 'Remove a scheduled task by ID.',
     inputSchema: {
       type: 'object',
@@ -189,8 +189,8 @@ export const DISCORD_TOOL_CONTRACTS: ToolContract[] = [
     },
   },
   {
-    name: 'schedule_toggle',
-    promptSignature: 'mcp__discord__schedule_toggle(id)',
+    name: 'toggle_schedule',
+    promptSignature: 'mcp__discord__toggle_schedule(id)',
     description: 'Toggle a scheduled task on/off by ID.',
     inputSchema: {
       type: 'object',

@@ -158,7 +158,7 @@ export function createTools(ctx: ToolContext) {
 
     // --- Schedule tools ---
 
-    defineTool('schedule_add', {
+    defineTool('add_schedule', {
       description: 'Register a scheduled task that sends a message to a channel on a cron schedule (timezone: Asia/Tokyo)',
       parameters: z.object({
         cron: z.string().describe('Cron expression (e.g. "0 9 * * *" for every day at 9:00 AM)'),
@@ -178,7 +178,7 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
-    defineTool('schedule_list', {
+    defineTool('list_schedules', {
       description: 'List all registered scheduled tasks',
       parameters: z.object({}),
       skipPermission: true,
@@ -187,7 +187,7 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
-    defineTool('schedule_remove', {
+    defineTool('remove_schedule', {
       description: 'Remove a scheduled task by ID',
       parameters: z.object({
         id: z.string().describe('Schedule ID to remove'),
@@ -199,7 +199,7 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
-    defineTool('schedule_toggle', {
+    defineTool('toggle_schedule', {
       description: 'Toggle a scheduled task on/off by ID',
       parameters: z.object({
         id: z.string().describe('Schedule ID to toggle'),
