@@ -53,46 +53,7 @@ cp .env.claude .env
 
 ### 6. AI Provider の認証設定
 
-利用する Provider に応じて、以下のいずれかを設定してください。
-
-#### GitHub Copilot を使う場合（`AI_PROVIDER=copilot`）
-
-以下のいずれかの方法で認証します:
-
-**方法 A: Personal Access Token（推奨）**
-
-[GitHub Personal Access Tokens](https://github.com/settings/personal-access-tokens/new) で新しいトークンを作成し、以下の権限を付与してください:
-
-- **Copilot Chat**
-- **Copilot Requests**
-
-生成したトークンを `.env` の `GITHUB_TOKEN` に設定します。
-
-**方法 B: `gh auth login`**
-
-`gh` CLI でログイン済みであれば、Copilot SDK はその認証情報を自動で利用できます。
-
-> ⚠️ **注意:** `gh auth login` の標準フローではアカウント全体の権限（リポジトリ操作・Issue・PR など）が `gh` に付与されます。最小権限で運用したい場合は方法 A（Copilot Chat / Copilot Requests のみの PAT）を推奨します。
-
-#### Claude を使う場合（`AI_PROVIDER=claude`）
-
-以下のいずれかの方法で認証します:
-
-**方法 A: Claude Code でログイン済み**
-
-Claude Codeをインストールして起動し、ログインを済ませておけば、Claude Agent SDK は同じ認証情報を再利用します。
-
-```sh
-claude   # 起動して画面の指示に従いログイン
-```
-
-**方法 B: API キー**
-
-Anthropic Console で発行した API キーを `.env` の `ANTHROPIC_API_KEY` に設定します。
-
-```sh
-ANTHROPIC_API_KEY=sk-ant-...
-```
+利用する Provider（GitHub Copilot または Claude Agent）に応じて認証情報を設定します。詳細は下記の [🤖 AI Provider](#-ai-provider) セクションを参照してください。
 
 ### 7. Discord Bot の作成
 
@@ -123,72 +84,63 @@ ANTHROPIC_API_KEY=sk-ant-...
 npm start
 ```
 
-### 🤖 マルチエージェント
+## 🤖 AI Provider
 
-`AGENT` 環境変数で `.env.<name>` を読み込めます:
-
-```bash
-AGENT=kaede npm start   # .env.kaede を読み込んで起動
-
-# package.json のショートカット
-npm run copilot         # GitHub Copilot SDK 経由で Copilot を起動
-npm run claude          # Claude Agent SDK 経由で Claude を起動
-```
-
-エージェントごとに `.env.copilot`, `.env.claude` 等を用意し、`WORKSPACE_DIR` を分けることでプラグインやファイルを隔離できます。
-
-### 🔁 AI Provider の切り替え
-
-既定では GitHub Copilot SDK を使用します。Claude を使う場合は `AI_PROVIDER=claude` を設定してください。Claude は Claude Agent SDK で永続セッションを再開します。
+Kaede は **GitHub Copilot SDK** と **Claude Agent SDK** の 2 つの AI Provider に対応しています。`AI_PROVIDER` 環境変数で切り替えます。
 
 | `AI_PROVIDER` | 実行方式 | 主なモデル環境変数 |
 |---------------|----------|--------------------|
 | `copilot`（デフォルト） | GitHub Copilot SDK | `COPILOT_MODEL` |
 | `claude` | Claude Agent SDK (`claude`) | `CLAUDE_MODEL` |
 
+### 切り替え方法
+
 ```sh
-# Claude Agent SDK
+# .env で指定
+AI_PROVIDER=claude
+
+# または環境変数で直接
 AI_PROVIDER=claude CLAUDE_MODEL=sonnet npm start
 ```
 
-Claude provider は Discord MCP ツール（例: `mcp__discord__send_message`）を使って返信します。このリポジトリには MCP サーバーも同梱しており、Claude Agent SDK 側へ毎回 MCP server 設定を注入します。
+#### マルチエージェント（`.env.<name>` の読み込み）
 
-```sh
-npm run --silent mcp
+`AGENT` 環境変数で `.env.<name>` を読み込めます。エージェントごとに `WORKSPACE_DIR` を分けることでプラグインやファイルを隔離できます。
+
+```bash
+AGENT=kaede npm start   # .env.kaede を読み込んで起動
+
+# package.json のショートカット
+npm run copilot         # .env.copilot を使って GitHub Copilot SDK で起動
+npm run claude          # .env.claude を使って Claude Agent SDK で起動
 ```
 
-MCP server は作業ディレクトリをこのリポジトリにして、コマンド `npm run --silent mcp` で起動されます。`npm run` の通常出力は stdio MCP のハンドシェイクを壊すため、`--silent` を付ける必要があります。Claude は SDK 側で同じ MCP server を毎回構成します。Claude Code のパスや追加引数は以下で調整できます。
+---
 
-| 環境変数 | 説明 |
-|----------|------|
-| `CLAUDE_COMMAND` | Claude Code 実行ファイルのパスまたはコマンド（既定: SDK 同梱の glibc/musl native binary を自動選択） |
-| `CLAUDE_ARGS` | Claude Agent SDK から Claude Code に追加する引数 |
-| `CLAUDE_PERMISSION_MODE` | Claude Agent SDK の permission mode（既定: `bypassPermissions`） |
-| `CLAUDE_ALLOWED_TOOLS` | Claude Agent SDK に渡す auto-allow ツール一覧（カンマ区切り） |
-| `CLAUDE_DISALLOWED_TOOLS` | Claude Agent SDK で禁止するツール一覧（カンマ区切り、既定で `AskUserQuestion` を含む） |
-| `REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
+### 🐙 GitHub Copilot（`AI_PROVIDER=copilot`）
 
-### 🌐 セッションスコープ
+#### 認証
 
-`SESSION_SCOPE` 環境変数でセッションの共有範囲を切り替えられます:
+以下のいずれかの方法で認証します:
 
-| 設定値 | 動作 |
-|--------|------|
-| `channel`（デフォルト） | チャンネルごとに独立したセッション。各チャンネルが別々の会話を持つ |
-| `server` | サーバー全体で 1 つのセッションを共有。どのチャンネルで話しても同じ会話の続き |
+**方法 A: Personal Access Token（推奨）**
 
-```sh
-# .env に追加
-SESSION_SCOPE=server
-```
+[GitHub Personal Access Tokens](https://github.com/settings/personal-access-tokens/new) で新しいトークンを作成し、以下の権限を付与してください:
 
-`server` モードでは、Bot はサーバー内のどのチャンネルからメッセージを受けても同一のセッション（会話履歴）を使用します。タイピング表示やステータスは、最後にメッセージを受信したチャンネルに表示されます。
+- **Copilot Chat**
+- **Copilot Requests**
 
-### 🔑 BYOK（Bring Your Own Key）
+生成したトークンを `.env` の `GITHUB_TOKEN` に設定します。
 
-GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, Azure OpenAI, Anthropic, Ollama など）を使用できます。
+**方法 B: `gh auth login`**
 
-`.env` に以下の環境変数を設定してください:
+`gh` CLI でログイン済みであれば、Copilot SDK はその認証情報を自動で利用できます。
+
+> ⚠️ **注意:** `gh auth login` の標準フローではアカウント全体の権限（リポジトリ操作・Issue・PR など）が `gh` に付与されます。最小権限で運用したい場合は方法 A（Copilot Chat / Copilot Requests のみの PAT）を推奨します。
+
+#### BYOK（Bring Your Own Key）
+
+GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, Azure OpenAI, Anthropic, Ollama など）を使用できます。`.env` に以下の環境変数を設定してください:
 
 | 環境変数 | 必須 | 説明 |
 |----------|------|------|
@@ -227,7 +179,69 @@ COPILOT_MAX_CONTEXT_WINDOW_TOKENS=262144
 
 > **Note:** BYOK 使用時は `GITHUB_TOKEN` を設定しなくても動作します。`GITHUB_TOKEN` を設定した場合は GitHub 認証が優先されます。
 
-### 🔄 PM2 によるプロセス管理
+---
+
+### 🟣 Claude Agent（`AI_PROVIDER=claude`）
+
+#### 認証
+
+以下のいずれかの方法で認証します:
+
+**方法 A: Claude Code でログイン済み**
+
+Claude Code をインストールして起動し、ログインを済ませておけば、Claude Agent SDK は同じ認証情報を再利用します。
+
+```sh
+claude   # 起動して画面の指示に従いログイン
+```
+
+**方法 B: API キー**
+
+Anthropic Console で発行した API キーを `.env` の `ANTHROPIC_API_KEY` に設定します。
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+#### Discord MCP サーバー
+
+Claude provider は Discord MCP ツール（例: `mcp__discord__send_message`）を使って返信します。このリポジトリには MCP サーバーも同梱しており、Claude Agent SDK 側へ毎回 MCP server 設定を注入します。
+
+```sh
+npm run --silent mcp
+```
+
+MCP server は作業ディレクトリをこのリポジトリにして、コマンド `npm run --silent mcp` で起動されます。`npm run` の通常出力は stdio MCP のハンドシェイクを壊すため、`--silent` を付ける必要があります。
+
+#### Claude 関連の環境変数
+
+| 環境変数 | 説明 |
+|----------|------|
+| `CLAUDE_MODEL` | 使用するモデル（例: `sonnet`, `opus`） |
+| `CLAUDE_COMMAND` | Claude Code 実行ファイルのパスまたはコマンド（既定: SDK 同梱の glibc/musl native binary を自動選択） |
+| `CLAUDE_ARGS` | Claude Agent SDK から Claude Code に追加する引数 |
+| `CLAUDE_PERMISSION_MODE` | Claude Agent SDK の permission mode（既定: `bypassPermissions`） |
+| `CLAUDE_ALLOWED_TOOLS` | Claude Agent SDK に渡す auto-allow ツール一覧（カンマ区切り） |
+| `CLAUDE_DISALLOWED_TOOLS` | Claude Agent SDK で禁止するツール一覧（カンマ区切り、既定で `AskUserQuestion` を含む） |
+| `REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
+
+## 🌐 セッションスコープ
+
+`SESSION_SCOPE` 環境変数でセッションの共有範囲を切り替えられます:
+
+| 設定値 | 動作 |
+|--------|------|
+| `channel`（デフォルト） | チャンネルごとに独立したセッション。各チャンネルが別々の会話を持つ |
+| `server` | サーバー全体で 1 つのセッションを共有。どのチャンネルで話しても同じ会話の続き |
+
+```sh
+# .env に追加
+SESSION_SCOPE=server
+```
+
+`server` モードでは、Bot はサーバー内のどのチャンネルからメッセージを受けても同一のセッション（会話履歴）を使用します。タイピング表示やステータスは、最後にメッセージを受信したチャンネルに表示されます。
+
+## 🔄 PM2 によるプロセス管理
 
 [PM2](https://pm2.keymetrics.io/) を使うと、Bot をバックグラウンドで常駐させ、クラッシュ時の自動再起動やシステム起動時の自動起動が可能になります。
 
