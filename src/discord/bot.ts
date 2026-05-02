@@ -273,11 +273,20 @@ export class DiscordBot extends Bot {
       }
 
       const SAFE_NAME = /^[a-zA-Z0-9._-]+$/;
-      const pm2AppName = process.env.name?.trim() || 'kaede';
-      if (!SAFE_NAME.test(pm2AppName)) {
-        await interaction.reply({ content: `❌ Unsafe pm2 app name: \`${pm2AppName}\``, ephemeral: true });
+      // PM2 sets `pm_id` for managed processes. Using the numeric id is
+      // safer than `process.env.name` because `npm start` overrides `name`
+      // with the package name, which would target the wrong PM2 app when
+      // multiple bots share the same package.
+      const pm2Target = process.env.pm_id?.trim();
+      if (!pm2Target || !/^\d+$/.test(pm2Target)) {
+        await interaction.reply({ content: '❌ Not running under PM2 (no `pm_id`); cannot switch env.', ephemeral: true });
         return;
       }
+      // Best-effort label resolution from the PM2 error log path
+      // (e.g. /home/ubuntu/.pm2/logs/kaede-error.log -> "kaede").
+      const errLog = process.env.pm_err_log_path ?? '';
+      const matched = /\/([^/]+)-error\.log$/.exec(errLog);
+      const pm2AppLabel = matched?.[1] && SAFE_NAME.test(matched[1]) ? matched[1] : `pm_id=${pm2Target}`;
 
       let agentValue = '';
       let label = 'default `.env`';
@@ -298,12 +307,12 @@ export class DiscordBot extends Bot {
       }
 
       this.counter.flush();
-      await interaction.reply(`🔄 Restarting \`${pm2AppName}\` with ${label}...`);
+      await interaction.reply(`🔄 Restarting \`${pm2AppLabel}\` with ${label}...`);
       try {
         // Only restart this app and refresh its env so other PM2 apps stay
         // untouched. `npm start` reads AGENT and loads .env.<AGENT>.
         execSync(
-          `nohup bash -c 'sleep 1 && AGENT=${agentValue} pm2 restart ${pm2AppName} --update-env' > /dev/null 2>&1 &`,
+          `nohup bash -c 'sleep 1 && AGENT=${agentValue} pm2 restart ${pm2Target} --update-env' > /dev/null 2>&1 &`,
           { stdio: 'pipe' },
         );
       } catch (err) {
