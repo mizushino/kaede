@@ -306,13 +306,26 @@ export class DiscordBot extends Bot {
         label = `\`${targetFile}\``;
       }
 
+      // Write agent name to .current-env so ecosystem.config.cjs picks it up
+      // when PM2 re-evaluates it. Empty string = use default .env (no suffix).
+      const projectRoot = path.resolve(this.workspaceDir, '..');
+      const currentEnvFile = path.join(projectRoot, '.current-env');
+      const ecosystemConfig = path.join(projectRoot, 'ecosystem.config.cjs');
+      try {
+        const { writeFile } = await import('fs/promises');
+        await writeFile(currentEnvFile, agentValue, 'utf-8');
+      } catch (err) {
+        logger.error('[BOT] Failed to write .current-env:', err);
+      }
+
       this.counter.flush();
       await interaction.reply(`🔄 Restarting \`${pm2AppLabel}\` with ${label}...`);
       try {
-        // Only restart this app and refresh its env so other PM2 apps stay
-        // untouched. `npm start` reads AGENT and loads .env.<AGENT>.
+        // Use startOrRestart so PM2 re-evaluates ecosystem.config.cjs and picks
+        // up the new AGENT from .current-env. --only ensures other PM2 apps are
+        // untouched.
         execSync(
-          `nohup bash -c 'sleep 1 && AGENT=${agentValue} pm2 restart ${pm2Target} --update-env' > /dev/null 2>&1 &`,
+          `nohup bash -c 'sleep 1 && pm2 startOrRestart ${ecosystemConfig} --only ${pm2AppLabel} && pm2 save' > /dev/null 2>&1 &`,
           { stdio: 'pipe' },
         );
       } catch (err) {

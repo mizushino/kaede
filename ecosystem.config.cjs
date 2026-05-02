@@ -1,3 +1,12 @@
+const fs = require('fs');
+const path = require('path');
+
+let agent = '';
+try {
+  const content = fs.readFileSync(path.join(__dirname, '.current-env'), 'utf8').trim();
+  agent = content;
+} catch {}
+
 module.exports = {
   apps: [{
     name: "kaede",
@@ -8,7 +17,7 @@ module.exports = {
     kill_timeout: 10000,
     env: {
       NODE_ENV: "development",
-      AGENT: "kaede",
+      AGENT: agent,
     }
   }]
 };
