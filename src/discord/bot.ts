@@ -9,12 +9,15 @@ import {
   AutocompleteInteraction,
 } from 'discord.js';
 import path from 'path';
+import { execSync } from 'child_process';
 import { ClaudeCodeProvider } from '../providers/claude.js';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
 import { PromptLoader } from '../core/prompts.js';
 import { logger } from '../core/logger.js';
+
+const ENV_SWITCH_IGNORED = new Set(['claude', 'copilot']);
 
 export class DiscordBot extends Bot {
   readonly discord: Client;
@@ -63,7 +66,12 @@ export class DiscordBot extends Bot {
         .setDescription('Show request usage statistics'),
       new SlashCommandBuilder()
         .setName('restart')
-        .setDescription('Restart the bot process'),
+        .setDescription('Restart the bot process, optionally switching the .env file')
+        .addStringOption(opt =>
+          opt.setName('env')
+            .setDescription('Env name to switch to (e.g. "kaede" for .env.kaede). Omit to restart with current env.')
+            .setRequired(false)
+            .setAutocomplete(true)),
       new SlashCommandBuilder()
         .setName('model')
         .setDescription('View or switch the AI model')
@@ -184,6 +192,24 @@ export class DiscordBot extends Bot {
       } catch {
         await interaction.respond([]);
       }
+    } else if (interaction.commandName === 'restart') {
+      try {
+        const { readdir } = await import('fs/promises');
+        const projectRoot = path.resolve(this.workspaceDir, '..');
+        const allFiles = await readdir(projectRoot);
+        const envFiles = allFiles.filter(f => /^\.env\..+/.test(f));
+        const envChoices = envFiles
+          .map(f => {
+            const envName = f.replace(/^\.env\./, '');
+            return { name: envName, value: envName };
+          })
+          .filter(c => !ENV_SWITCH_IGNORED.has(c.value) && c.value.toLowerCase().includes(focused));
+        const defaultChoice = { name: 'default (.env)', value: 'default' };
+        const choices = (defaultChoice.name.toLowerCase().includes(focused) ? [defaultChoice, ...envChoices] : envChoices).slice(0, 25);
+        await interaction.respond(choices);
+      } catch {
+        await interaction.respond([]);
+      }
     }
   }
 
@@ -235,10 +261,46 @@ export class DiscordBot extends Bot {
     }
 
     if (interaction.commandName === 'restart') {
-      this.counter.flush();
-      await interaction.reply('🔄 Restarting...');
-      logger.log('[BOT] Restart requested via slash command');
-      setTimeout(() => process.exit(0), 1000);
+      const envName = interaction.options.getString('env')?.trim() ?? '';
+      const projectRoot = path.resolve(this.workspaceDir, '..');
+      const currentEnvFile = path.join(projectRoot, '.current-env');
+      const ecosystemConfig = path.join(projectRoot, 'ecosystem.config.cjs');
+
+      if (envName === 'default') {
+        // Reset to default .env
+        await interaction.reply('🔄 Resetting to `.env` and restarting...');
+        try {
+          const { unlink } = await import('fs/promises');
+          const { existsSync } = await import('fs');
+          if (existsSync(currentEnvFile)) await unlink(currentEnvFile);
+          execSync(`nohup bash -c 'sleep 1 && pm2 startOrRestart ${ecosystemConfig} && pm2 save' > /dev/null 2>&1 &`, { stdio: 'pipe' });
+        } catch (err) {
+          logger.error('[BOT] Failed to reset env:', err);
+        }
+      } else if (envName) {
+        // Switch env and restart via pm2 startOrRestart
+        const targetFile = `.env.${envName}`;
+        const targetPath = path.join(projectRoot, targetFile);
+        const { existsSync } = await import('fs');
+        if (!existsSync(targetPath)) {
+          await interaction.reply({ content: `❌ \`${targetFile}\` not found`, ephemeral: true });
+          return;
+        }
+        await interaction.reply(`🔄 Switching to \`${targetFile}\` and restarting...`);
+        try {
+          const { writeFile } = await import('fs/promises');
+          await writeFile(currentEnvFile, targetFile, 'utf-8');
+          execSync(`nohup bash -c 'sleep 1 && pm2 startOrRestart ${ecosystemConfig} && pm2 save' > /dev/null 2>&1 &`, { stdio: 'pipe' });
+        } catch (err) {
+          logger.error('[BOT] Failed to switch env:', err);
+        }
+      } else {
+        // Simple restart with current env
+        this.counter.flush();
+        await interaction.reply('🔄 Restarting...');
+        logger.log('[BOT] Restart requested via slash command');
+        setTimeout(() => process.exit(0), 1000);
+      }
       return;
     }
 
