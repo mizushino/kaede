@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
 import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query } from '@anthropic-ai/claude-agent-sdk';
@@ -396,6 +396,7 @@ export class ClaudeCodeProvider extends BaseProvider {
       ...(permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       ...(claudeCommand ? { pathToClaudeCodeExecutable: claudeCommand } : {}),
       ...(process.env.CLAUDE_ARGS ? { extraArgs: this.parseExtraArgs(process.env.CLAUDE_ARGS) } : {}),
+      ...this.buildSystemPromptOption(),
       tools: { type: 'preset', preset: 'claude_code' },
       allowedTools: this.getAllowedTools(),
       disallowedTools: this.getDisallowedTools(),
@@ -680,6 +681,26 @@ export class ClaudeCodeProvider extends BaseProvider {
       }
 
       this.context.messenger.setStatus(this.formatToolStatus(normalized, detail || undefined));
+    }
+  }
+
+  private buildSystemPromptOption(): { systemPrompt: Options['systemPrompt'] } | Record<string, never> {
+    const agentsMdPath = process.env.AGENTS_MD_PATH?.trim();
+    if (!agentsMdPath) return {};
+
+    const resolvedPath = path.resolve(agentsMdPath);
+    if (!existsSync(resolvedPath)) {
+      logger.error(`[CLAUDE] AGENTS_MD_PATH not found: ${resolvedPath}`);
+      return {};
+    }
+
+    try {
+      const append = readFileSync(resolvedPath, 'utf8');
+      logger.log(`[CLAUDE] Using custom AGENTS.md from: ${resolvedPath}`);
+      return { systemPrompt: { type: 'preset', preset: 'claude_code', append } };
+    } catch (err) {
+      logger.error(`[CLAUDE] Failed to read AGENTS_MD_PATH: ${err}`);
+      return {};
     }
   }
 
