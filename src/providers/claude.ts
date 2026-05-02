@@ -147,10 +147,6 @@ export class ClaudeCodeProvider extends BaseProvider {
       return this.formatToolStatus('get_channels');
     }
 
-    if (tail.includes('mcp__discord__get_servers')) {
-      return this.formatToolStatus('get_servers');
-    }
-
     if (tail.includes('mcp__discord__ask_user')) {
       return this.formatToolStatus('ask_user');
     }

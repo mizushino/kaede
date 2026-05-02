@@ -164,8 +164,6 @@ class KaedeMcpServer {
             return await this.getMessages(request.params.arguments);
           case 'get_channels':
             return await this.getChannels(request.params.arguments);
-          case 'get_servers':
-            return this.getServers();
           case 'ask_user':
             return await this.askUser(request.params.arguments);
           case 'add_schedule':
@@ -289,18 +287,6 @@ class KaedeMcpServer {
         name: channel.name,
         type: channel.type,
       }));
-
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
-    };
-  }
-
-  private getServers() {
-    const data = this.discord.guilds.cache.map(guild => ({
-      id: guild.id,
-      name: guild.name,
-      memberCount: guild.memberCount,
-    }));
 
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],

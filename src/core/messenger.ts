@@ -12,12 +12,6 @@ export interface ChannelInfo {
   type: number;
 }
 
-export interface ServerInfo {
-  id: string;
-  name: string;
-  memberCount: number;
-}
-
 const TYPING_INTERVAL = 8_000;
 const MESSAGE_MAX_LENGTH = 2000;
 const STATUS_THROTTLE_MS = 1000;
@@ -54,7 +48,6 @@ export abstract class Messenger {
   abstract sendMessage(channelId: string, content?: string, replyTo?: string, imagePath?: string): Promise<number>;
   abstract getMessages(channelId: string, limit: number): Promise<MessageInfo[]>;
   abstract getChannels(serverId: string): Promise<ChannelInfo[]>;
-  abstract getServers(): ServerInfo[];
   abstract sendError(message: string): Promise<void>;
 
   /**

@@ -92,12 +92,6 @@ export const DISCORD_TOOL_CONTRACTS: ToolContract[] = [
     },
   },
   {
-    name: 'get_servers',
-    promptSignature: 'mcp__discord__get_servers()',
-    description: 'Get Discord servers the bot is in.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
     name: 'list_funcs',
     promptSignature: 'mcp__discord__list_funcs()',
     description: 'List installed functions.',

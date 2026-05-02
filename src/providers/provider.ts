@@ -138,7 +138,6 @@ export abstract class BaseProvider {
         return readString('id');
       case 'get_messages':
       case 'get_channels':
-      case 'get_servers':
         return readString('channelId', 'serverId');
       default:
         return Object.keys(input).length ? JSON.stringify(input).slice(0, 120) : '';

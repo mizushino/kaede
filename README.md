@@ -393,7 +393,6 @@ Hello! I'm your AI assistant. How can I help you today?
 | `send_message` | 💬 メッセージ送信（リプライ・画像添付対応、自動分割） |
 | `get_messages` | 📨 チャンネルのメッセージ履歴取得 |
 | `get_channels` | 📁 サーバーのチャンネル一覧取得 |
-| `get_servers` | 🏠 Bot 参加サーバー一覧取得 |
 | `wait_messages` | ⏳ 新着メッセージ待機（イベント駆動） |
 
 AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセージが来ると即座に処理を再開します。タイムアウト時はセッションが終了し、次のメッセージで新しいセッションが作成されます。

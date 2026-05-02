@@ -2,7 +2,7 @@ import { Client, ActivityType, TextChannel, ThreadChannel, AttachmentBuilder, Me
 import fs from 'fs/promises';
 import path from 'path';
 import { Messenger } from '../core/messenger.js';
-import type { MessageInfo, ChannelInfo, ServerInfo } from '../core/messenger.js';
+import type { MessageInfo, ChannelInfo } from '../core/messenger.js';
 import { logger } from '../core/logger.js';
 
 export class DiscordMessenger extends Messenger {
@@ -67,14 +67,6 @@ export class DiscordMessenger extends Messenger {
         name: ch!.name,
         type: ch!.type,
       }));
-  }
-
-  getServers(): ServerInfo[] {
-    return this.client.guilds.cache.map(guild => ({
-      id: guild.id,
-      name: guild.name,
-      memberCount: guild.memberCount,
-    }));
   }
 
   protected async sendTypingIndicator(): Promise<void> {

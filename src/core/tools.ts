@@ -114,15 +114,6 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
-    defineTool('get_servers', {
-      description: 'Get list of servers the bot is in',
-      parameters: z.object({}),
-      skipPermission: true,
-      handler: async () => {
-        return ctx.messenger.getServers();
-      },
-    }),
-
     defineTool('wait_messages', {
       description: 'Wait for new messages. Call this after responding.',
       parameters: z.object({}),

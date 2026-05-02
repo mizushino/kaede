@@ -3,7 +3,6 @@ export const STATUS_ICON: Record<string, string> = {
   send_message:   '📨',
   get_messages:   '👀',
   get_channels:   '📁',
-  get_servers:    '🏠',
   check_message:  '👀',
   wait_messages:  '',
   // Function management
