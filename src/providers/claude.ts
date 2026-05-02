@@ -2,10 +2,11 @@ import { createHash } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
-import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { BaseProvider } from './provider.js';
 import type { ElicitationSchema, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
+import { PromptQueue } from '../core/prompt_queue.js';
 import { getClaudeDiscordAllowedTools } from '../core/tool_contract.js';
 
 const require_ = createRequire(import.meta.url);
@@ -57,47 +58,6 @@ interface PendingTurn {
   sawResult: boolean;
 }
 
-class PromptQueue implements AsyncIterable<SDKUserMessage> {
-  private buffer: SDKUserMessage[] = [];
-  private resolvers: Array<(r: IteratorResult<SDKUserMessage>) => void> = [];
-  private closed = false;
-
-  push(msg: SDKUserMessage): void {
-    if (this.closed) return;
-    const r = this.resolvers.shift();
-    if (r) {
-      r({ value: msg, done: false });
-    } else {
-      this.buffer.push(msg);
-    }
-  }
-
-  close(): void {
-    if (this.closed) return;
-    this.closed = true;
-    for (const r of this.resolvers) {
-      r({ value: undefined as unknown as SDKUserMessage, done: true });
-    }
-    this.resolvers = [];
-  }
-
-  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
-    return {
-      next: (): Promise<IteratorResult<SDKUserMessage>> => {
-        if (this.buffer.length > 0) {
-          return Promise.resolve({ value: this.buffer.shift()!, done: false });
-        }
-        if (this.closed) {
-          return Promise.resolve({ value: undefined as unknown as SDKUserMessage, done: true });
-        }
-        return new Promise<IteratorResult<SDKUserMessage>>(resolve => {
-          this.resolvers.push(resolve);
-        });
-      },
-    };
-  }
-}
-
 function buildUserMessage(prompt: string): SDKUserMessage {
   return {
     type: 'user',
@@ -146,7 +106,7 @@ export class ClaudeCodeProvider extends BaseProvider {
   }
 
   private activeStream?: Query;
-  private streamQueue?: PromptQueue;
+  private streamQueue?: PromptQueue<SDKUserMessage>;
   private streamReader?: Promise<void>;
   private streamSignature?: string;
   private streamDead = false;
@@ -400,7 +360,7 @@ export class ClaudeCodeProvider extends BaseProvider {
     }
 
     const queryOptions = await this.buildQueryOptions(options, modelOverride, effort);
-    const queue = new PromptQueue();
+    const queue = new PromptQueue<SDKUserMessage>();
     const stream = query({ prompt: queue, options: queryOptions });
 
     this.activeStream = stream;
@@ -416,11 +376,7 @@ export class ClaudeCodeProvider extends BaseProvider {
   }
 
   private tearDownStream(err: Error): void {
-    if (this.currentTurn) {
-      const turn = this.currentTurn;
-      this.currentTurn = undefined;
-      turn.reject(err);
-    }
+    this.failPendingTurn(err);
     if (this.streamQueue) {
       this.streamQueue.close();
       this.streamQueue = undefined;
@@ -441,111 +397,105 @@ export class ClaudeCodeProvider extends BaseProvider {
   private async runReader(stream: Query): Promise<void> {
     try {
       for await (const message of stream) {
-        if ('session_id' in message && typeof message.session_id === 'string') {
-          this.currentSessionId = message.session_id;
-        }
-
-        if (message.type === 'auth_status') {
-          this.context.messenger.setStatus(`${this.getIcon()} Claude 認証待機中...`);
-          if (message.error && this.currentTurn) {
-            this.currentTurn.authError = message.error;
-          }
-          continue;
-        }
-
-        if (message.type === 'assistant' && (message as { error?: string }).error) {
-          if (this.currentTurn) {
-            this.currentTurn.authError = this.describeAssistantError((message as { error: string }).error);
-          }
-          continue;
-        }
-
-        if (message.type === 'assistant') {
-          if (this.currentTurn) {
-            this.handleAssistantToolUses(message, this.currentTurn.state);
-          }
-          continue;
-        }
-
-        if (message.type === 'tool_use_summary') {
-          this.setDetectedStatus((message as { summary?: string }).summary);
-          continue;
-        }
-
-        if (message.type === 'tool_progress') {
-          const normalized = this.normalizeToolName((message as { tool_name: string }).tool_name);
-          this.context.messenger.setStatus(this.formatToolStatus(normalized));
-          continue;
-        }
-
-        if (message.type === 'system') {
-          const sys = message as {
-            subtype?: string;
-            last_tool_name?: string;
-            patch?: { description?: string };
-            text?: string;
-            priority?: string;
-            mcp_servers?: Array<{ name: string; status: string }>;
-          };
-          if (sys.subtype === 'task_progress' && sys.last_tool_name) {
-            this.context.messenger.setStatus(this.formatToolStatus(this.normalizeToolName(sys.last_tool_name)));
-          } else if (sys.subtype === 'task_updated') {
-            this.setDetectedStatus(sys.patch?.description);
-          } else if (sys.subtype === 'notification' && sys.priority !== 'low') {
-            this.setDetectedStatus(sys.text);
-            logger.log(`[${this.name}] notification: ${sys.text}`);
-          } else if (sys.subtype === 'init') {
-            const failedServers = (sys.mcp_servers ?? []).filter(server => server.status === 'failed');
-            if (failedServers.length > 0) {
-              logger.log(`[${this.name}] MCP connection issues: ${failedServers.map(server => `${server.name}:${server.status}`).join(', ')}`);
-            }
-          }
-          continue;
-        }
-
-        if (message.type === 'result') {
-          const turn = this.currentTurn;
-          if (!turn) {
-            logger.log(`[${this.name}] Received result with no pending turn`);
-            continue;
-          }
-
-          turn.sawResult = true;
-          const res = message as { subtype?: string; errors?: string[]; result?: string };
-
-          if (res.subtype !== 'success') {
-            turn.resultError = this.formatResultError(res.errors ?? []);
-          } else if (!turn.state.sentDiscordMessage && (res.result ?? '').trim()) {
-            logger.log(`[${this.name}] Result completed without discord send_message tool usage`);
-          }
-
-          this.currentTurn = undefined;
-
-          if (turn.authError) {
-            turn.reject(new Error(turn.authError));
-          } else if (turn.resultError) {
-            turn.reject(new Error(turn.resultError));
-          } else {
-            turn.resolve();
-          }
-          continue;
-        }
+        this.handleMessage(message);
       }
 
       // Stream ended cleanly. If a turn is still pending, treat as failure.
-      if (this.currentTurn) {
-        const turn = this.currentTurn;
-        this.currentTurn = undefined;
-        turn.reject(new Error('claude query stream ended without a result'));
-      }
+      this.failPendingTurn(new Error('claude query stream ended without a result'));
     } catch (err) {
       logger.error(`[${this.name}] Stream reader error:`, err);
-      if (this.currentTurn) {
-        const turn = this.currentTurn;
-        this.currentTurn = undefined;
-        turn.reject(err instanceof Error ? err : new Error(String(err)));
+      this.failPendingTurn(err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  private handleMessage(message: SDKMessage): void {
+    if ('session_id' in message && typeof message.session_id === 'string') {
+      this.currentSessionId = message.session_id;
+    }
+
+    switch (message.type) {
+      case 'auth_status':
+        this.context.messenger.setStatus(`${this.getIcon()} Claude 認証待機中...`);
+        if (message.error && this.currentTurn) {
+          this.currentTurn.authError = message.error;
+        }
+        return;
+
+      case 'assistant':
+        if (message.error && this.currentTurn) {
+          this.currentTurn.authError = this.describeAssistantError(message.error);
+          return;
+        }
+        if (this.currentTurn) {
+          this.handleAssistantToolUses(message, this.currentTurn.state);
+        }
+        return;
+
+      case 'tool_use_summary':
+        this.setDetectedStatus(message.summary);
+        return;
+
+      case 'tool_progress':
+        this.context.messenger.setStatus(this.formatToolStatus(this.normalizeToolName(message.tool_name)));
+        return;
+
+      case 'system':
+        this.handleSystemMessage(message);
+        return;
+
+      case 'result':
+        this.handleResultMessage(message);
+        return;
+    }
+  }
+
+  private handleSystemMessage(message: Extract<SDKMessage, { type: 'system' }>): void {
+    if (message.subtype === 'task_progress' && message.last_tool_name) {
+      this.context.messenger.setStatus(this.formatToolStatus(this.normalizeToolName(message.last_tool_name)));
+    } else if (message.subtype === 'task_updated') {
+      this.setDetectedStatus(message.patch.description);
+    } else if (message.subtype === 'notification' && message.priority !== 'low') {
+      this.setDetectedStatus(message.text);
+      logger.log(`[${this.name}] notification: ${message.text}`);
+    } else if (message.subtype === 'init') {
+      const failedServers = message.mcp_servers.filter(server => server.status === 'failed');
+      if (failedServers.length > 0) {
+        logger.log(`[${this.name}] MCP connection issues: ${failedServers.map(server => `${server.name}:${server.status}`).join(', ')}`);
       }
     }
+  }
+
+  private handleResultMessage(message: Extract<SDKMessage, { type: 'result' }>): void {
+    const turn = this.currentTurn;
+    if (!turn) {
+      logger.log(`[${this.name}] Received result with no pending turn`);
+      return;
+    }
+
+    turn.sawResult = true;
+
+    if (message.subtype !== 'success') {
+      turn.resultError = this.formatResultError(message.errors);
+    } else if (!turn.state.sentDiscordMessage && message.result.trim()) {
+      logger.log(`[${this.name}] Result completed without discord send_message tool usage`);
+    }
+
+    this.currentTurn = undefined;
+
+    if (turn.authError) {
+      turn.reject(new Error(turn.authError));
+    } else if (turn.resultError) {
+      turn.reject(new Error(turn.resultError));
+    } else {
+      turn.resolve();
+    }
+  }
+
+  private failPendingTurn(err: Error): void {
+    if (!this.currentTurn) return;
+    const turn = this.currentTurn;
+    this.currentTurn = undefined;
+    turn.reject(err);
   }
 
   private async buildQueryOptions(
