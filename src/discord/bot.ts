@@ -662,6 +662,16 @@ export class DiscordBot extends Bot {
   }
 
   async shutdown(): Promise<void> {
+    const token = process.env.DISCORD_BOT_TOKEN;
+    if (token && this.discord.user) {
+      try {
+        const rest = new REST().setToken(token);
+        await rest.put(Routes.applicationCommands(this.discord.user.id), { body: [] });
+        logger.log('[BOT] Cleared all slash commands');
+      } catch (err) {
+        logger.error('[BOT] Failed to clear slash commands:', err);
+      }
+    }
     await super.shutdown();
     this.discord.destroy();
   }
