@@ -578,6 +578,9 @@ export class ClaudeCodeProvider extends BaseProvider {
         return { action: outcome.action };
       },
       ...sessionOptions,
+      ...(process.env.AUTO_COMPACT_THRESHOLD
+        ? { autoCompactThreshold: Number(process.env.AUTO_COMPACT_THRESHOLD) }
+        : {}),
     };
   }
 
