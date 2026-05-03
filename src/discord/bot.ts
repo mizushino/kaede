@@ -71,6 +71,9 @@ export class DiscordBot extends Bot {
             .setMinValue(1)
             .setMaxValue(90)),
       new SlashCommandBuilder()
+        .setName('context')
+        .setDescription('Show current context window usage (Claude Agent SDK only)'),
+      new SlashCommandBuilder()
         .setName('restart')
         .setDescription('Restart the bot process, optionally switching the .env file')
         .addStringOption(opt =>
@@ -261,6 +264,45 @@ export class DiscordBot extends Bot {
           `📊 **Request Statistics**\n\n` +
           `📆 **Last ${days} Day${days === 1 ? '' : 's'}** (↓recv ↑sent)\n${dailyLines}\n\n` +
           `📋 **${days}-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (interaction.commandName === 'context') {
+      const sessionKey = this.resolveSessionKey(interaction.channelId, interaction.guildId ?? undefined);
+      const agent = this.sessions.get(sessionKey);
+      if (!agent) {
+        await interaction.reply({ content: '🧠 No active session yet. Send a message first.', ephemeral: true });
+        return;
+      }
+      const usage = await agent.getContextUsage();
+      if (!usage) {
+        await interaction.reply({
+          content: '🧠 Context usage is unavailable for this provider, or no active session yet. Send a message first to start a session (Claude Agent SDK only).',
+          ephemeral: true,
+        });
+        return;
+      }
+      const fmt = (n: number) => n.toLocaleString('en-US');
+      const pct = usage.percentage.toFixed(1);
+      const remaining = Math.max(0, usage.maxTokens - usage.totalTokens);
+      const barLen = 20;
+      const filled = Math.min(barLen, Math.round((usage.percentage / 100) * barLen));
+      const bar = '█'.repeat(filled) + '░'.repeat(barLen - filled);
+      const topCategories = [...usage.categories]
+        .filter(c => c.tokens > 0)
+        .sort((a, b) => b.tokens - a.tokens)
+        .slice(0, 8)
+        .map(c => `  • ${c.name}: ${fmt(c.tokens)}`)
+        .join('\n') || '  (no breakdown)';
+      const modelLine = usage.model ? `\n🤖 Model: \`${usage.model}\`` : '';
+      await interaction.reply({
+        content:
+          `🧠 **Context Usage**\n` +
+          `\`${bar}\` ${pct}%\n` +
+          `Used: **${fmt(usage.totalTokens)}** / ${fmt(usage.maxTokens)} tokens (remaining: ${fmt(remaining)})${modelLine}\n\n` +
+          `**Breakdown**\n${topCategories}`,
         ephemeral: true,
       });
       return;

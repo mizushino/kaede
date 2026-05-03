@@ -38,6 +38,19 @@ export type ElicitationOutcome =
   | { action: 'cancel' }
   | { action: 'decline' };
 
+export interface ContextUsageCategory {
+  name: string;
+  tokens: number;
+}
+
+export interface ContextUsageInfo {
+  totalTokens: number;
+  maxTokens: number;
+  percentage: number;
+  model?: string;
+  categories: ContextUsageCategory[];
+}
+
 export abstract class BaseProvider {
   abstract readonly name: string;
 
@@ -211,6 +224,11 @@ export abstract class BaseProvider {
   async setModel(): Promise<void> {}
 
   getRemainingTurnTimeMs(): number | null {
+    return null;
+  }
+
+  /** Optional: return current context window usage if the provider exposes it. */
+  async getContextUsage(): Promise<ContextUsageInfo | null> {
     return null;
   }
 

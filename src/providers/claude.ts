@@ -4,7 +4,7 @@ import { createRequire } from 'module';
 import path from 'path';
 import { deleteSession, getSessionInfo, query, type ModelInfo, type Options, type PermissionMode, type PermissionResult, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { BaseProvider } from './provider.js';
-import type { ElicitationSchema, ProviderOptions } from './provider.js';
+import type { ContextUsageInfo, ElicitationSchema, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
 import { PromptQueue } from '../core/prompt_queue.js';
 import { getClaudeDiscordAllowedTools } from '../core/tool_contract.js';
@@ -120,6 +120,24 @@ export class ClaudeCodeProvider extends BaseProvider {
 
   protected getDisplayName(): string {
     return 'Claude Agent SDK';
+  }
+
+  override async getContextUsage(): Promise<ContextUsageInfo | null> {
+    const stream = this.activeStream;
+    if (!stream || this.streamDead) return null;
+    try {
+      const usage = await stream.getContextUsage();
+      return {
+        totalTokens: usage.totalTokens,
+        maxTokens: usage.maxTokens,
+        percentage: usage.percentage,
+        model: usage.model,
+        categories: (usage.categories ?? []).map(c => ({ name: c.name, tokens: c.tokens })),
+      };
+    } catch (err) {
+      logger.error(`[${this.name}] Failed to get context usage:`, err);
+      return null;
+    }
   }
 
   private setDetectedStatus(content?: string | null): void {

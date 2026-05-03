@@ -1,6 +1,6 @@
 import { CopilotAgent } from '../providers/index.js';
 import { ClaudeAgent } from '../providers/index.js';
-import type { ReasoningEffort } from '../providers/provider.js';
+import type { ContextUsageInfo, ReasoningEffort } from '../providers/provider.js';
 import { CopilotClientManager } from './client.js';
 import { RequestCounter } from './counter.js';
 import { Scheduler } from './scheduler.js';
@@ -26,6 +26,7 @@ export interface Agent {
   setModel(model: string, reasoningEffort?: ReasoningEffort | ''): Promise<void>;
   processMessage(message: { id: string; channelId: string; author: string; content: string }, attachments: string[], files?: string[]): Promise<void>;
   getRemainingTurnTimeMs(): number | null;
+  getContextUsage(): Promise<ContextUsageInfo | null>;
   dispose(): Promise<void>;
   deleteSession(): Promise<void>;
 }

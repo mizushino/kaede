@@ -4,7 +4,7 @@ import type { Inbox, IncomingMessage, QueuedMessage } from '../core/inbox.js';
 import type { Messenger } from '../core/messenger.js';
 import type { Scheduler } from '../core/scheduler.js';
 import { logger } from '../core/logger.js';
-import type { BaseProvider, ReasoningEffort } from './provider.js';
+import type { BaseProvider, ContextUsageInfo, ReasoningEffort } from './provider.js';
 
 const DEFAULT_MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 
@@ -49,6 +49,10 @@ export abstract class BaseAgent implements Agent {
 
   getRemainingTurnTimeMs(): number | null {
     return this.provider.getRemainingTurnTimeMs();
+  }
+
+  async getContextUsage(): Promise<ContextUsageInfo | null> {
+    return this.provider.getContextUsage();
   }
 
   async processMessage(message: IncomingMessage, attachments: string[], files: string[] = []): Promise<void> {
