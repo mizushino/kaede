@@ -72,7 +72,7 @@ export class DiscordBot extends Bot {
             .setMaxValue(90)),
       new SlashCommandBuilder()
         .setName('context')
-        .setDescription('Show current context window usage (Claude Agent SDK only)'),
+        .setDescription('Show current context window usage'),
       new SlashCommandBuilder()
         .setName('restart')
         .setDescription('Restart the bot process, optionally switching the .env file')
@@ -279,7 +279,7 @@ export class DiscordBot extends Bot {
       const usage = await agent.getContextUsage();
       if (!usage) {
         await interaction.reply({
-          content: '🧠 Context usage is unavailable for this provider, or no active session yet. Send a message first to start a session (Claude Agent SDK only).',
+          content: '🧠 Context usage is unavailable yet. Send a message first to start a session.',
           ephemeral: true,
         });
         return;

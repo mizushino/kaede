@@ -8,7 +8,7 @@ import { createTools, type ToolContext } from '../core/tools.js';
 import { createPermissionHandler, type PermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
 import { BaseProvider } from './provider.js';
-import type { ProviderContext, ProviderOptions, ReasoningEffort as BaseReasoningEffort } from './provider.js';
+import type { ContextUsageInfo, ProviderContext, ProviderOptions, ReasoningEffort as BaseReasoningEffort } from './provider.js';
 
 export type ReasoningEffort = BaseReasoningEffort;
 export type CopilotSendErrorAction = 'retry' | 'stop' | 'connection' | 'fail';
@@ -38,6 +38,14 @@ export class CopilotCodeProvider extends BaseProvider {
 	private currentSession: CopilotSession | null = null;
 	private resumeOnNextMessage = false;
 	private activeTurnDeadlineMs: number | null = null;
+	private lastUsageInfo: {
+		currentTokens: number;
+		tokenLimit: number;
+		conversationTokens?: number;
+		systemTokens?: number;
+		toolDefinitionsTokens?: number;
+		messagesLength: number;
+	} | null = null;
 
 	constructor(protected readonly context: CopilotProviderContext) {
 		super(context);
@@ -59,6 +67,22 @@ export class CopilotCodeProvider extends BaseProvider {
 	getRemainingTurnTimeMs(): number | null {
 		if (this.activeTurnDeadlineMs == null) return null;
 		return Math.max(0, this.activeTurnDeadlineMs - Date.now());
+	}
+
+	override async getContextUsage(): Promise<ContextUsageInfo | null> {
+		const usage = this.lastUsageInfo;
+		if (!usage || !usage.tokenLimit) return null;
+		const categories: { name: string; tokens: number }[] = [];
+		if (usage.systemTokens != null) categories.push({ name: 'System', tokens: usage.systemTokens });
+		if (usage.toolDefinitionsTokens != null) categories.push({ name: 'Tools', tokens: usage.toolDefinitionsTokens });
+		if (usage.conversationTokens != null) categories.push({ name: 'Conversation', tokens: usage.conversationTokens });
+		return {
+			totalTokens: usage.currentTokens,
+			maxTokens: usage.tokenLimit,
+			percentage: usage.tokenLimit > 0 ? (usage.currentTokens / usage.tokenLimit) * 100 : 0,
+			model: this.context.getModel(),
+			categories,
+		};
 	}
 
 	async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
@@ -282,6 +306,19 @@ IMPORTANT RULES:
 		session.on('session.idle', () => {
 			this.context.messenger.clearStatus();
 			this.context.messenger.stopTyping();
+		});
+
+		session.on('session.usage_info', (event: any) => {
+			const data = event?.data;
+			if (!data || typeof data.currentTokens !== 'number' || typeof data.tokenLimit !== 'number') return;
+			this.lastUsageInfo = {
+				currentTokens: data.currentTokens,
+				tokenLimit: data.tokenLimit,
+				conversationTokens: typeof data.conversationTokens === 'number' ? data.conversationTokens : undefined,
+				systemTokens: typeof data.systemTokens === 'number' ? data.systemTokens : undefined,
+				toolDefinitionsTokens: typeof data.toolDefinitionsTokens === 'number' ? data.toolDefinitionsTokens : undefined,
+				messagesLength: typeof data.messagesLength === 'number' ? data.messagesLength : 0,
+			};
 		});
 	}
 
