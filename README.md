@@ -363,6 +363,9 @@ Discord のスラッシュコマンドとして利用できます。
 | コマンド | 説明 |
 |----------|------|
 | `/clear` | 現在のセッションをリセット（会話履歴・CLI セッションを削除） |
+| `/stats [days]` | リクエスト利用統計を表示（`days` で日数指定、1〜90、デフォルト 7） |
+| `/context` | 現在のコンテキストウィンドウ使用量を表示（Copilot / Claude Agent SDK 両対応。1ターン以上やり取り後に利用可能） |
+| `/restart [env]` | Bot プロセスを再起動（`env` 指定で `.env.<name>` に切り替え可能） |
 | `/model set <model_id> [effort]` | 使用モデルを切り替え（Copilot 例: `/model set claude-sonnet-4.6 high` / Claude 例: `/model set sonnet high`） |
 | `/model get` | 現在のモデルと推論レベルを表示 |
 | `/model list` | 利用可能なモデル一覧を表示（Copilot はコスト含む / Claude は対応 effort 含む） |
