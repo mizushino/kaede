@@ -15,7 +15,7 @@ interface PersistedData {
   logs: RequestLogEntry[];
 }
 
-const LOG_RETENTION_DAYS = 30;
+const LOG_RETENTION_DAYS = 90;
 
 export class RequestCounter {
   private logs: RequestLogEntry[];

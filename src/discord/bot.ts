@@ -63,7 +63,13 @@ export class DiscordBot extends Bot {
         .setDescription('Clear the current AI session'),
       new SlashCommandBuilder()
         .setName('stats')
-        .setDescription('Show request usage statistics'),
+        .setDescription('Show request usage statistics')
+        .addIntegerOption(opt =>
+          opt.setName('days')
+            .setDescription('Number of days to show (default: 7)')
+            .setRequired(false)
+            .setMinValue(1)
+            .setMaxValue(90)),
       new SlashCommandBuilder()
         .setName('restart')
         .setDescription('Restart the bot process, optionally switching the .env file')
@@ -221,8 +227,9 @@ export class DiscordBot extends Bot {
     }
 
     if (interaction.commandName === 'stats') {
-      // Daily stats (last 7 days)
-      const daily = this.counter.getDailyStats(7);
+      const days = interaction.options.getInteger('days') ?? 7;
+      // Daily stats (last N days)
+      const daily = this.counter.getDailyStats(days);
       const maxDaily = Math.max(...daily.map(d => d.requests), 1);
       const dailyLines = daily.length > 0
         ? daily.map(d => {
@@ -235,13 +242,12 @@ export class DiscordBot extends Bot {
           }).join('\n')
         : '  (No data)';
 
-      // 30-day totals
-      const all = this.counter.getDailyStats(30);
-      const totalReq = all.reduce((s, d) => s + d.requests, 0);
-      const totalRecv = all.reduce((s, d) => s + d.recv, 0);
-      const totalSent = all.reduce((s, d) => s + d.sent, 0);
+      // Totals over the same window
+      const totalReq = daily.reduce((s, d) => s + d.requests, 0);
+      const totalRecv = daily.reduce((s, d) => s + d.recv, 0);
+      const totalSent = daily.reduce((s, d) => s + d.sent, 0);
       const modelTotals: Record<string, number> = {};
-      for (const d of all) {
+      for (const d of daily) {
         for (const [m, c] of Object.entries(d.models)) {
           modelTotals[m] = (modelTotals[m] || 0) + c;
         }
@@ -253,8 +259,8 @@ export class DiscordBot extends Bot {
       await interaction.reply({
         content:
           `📊 **Request Statistics**\n\n` +
-          `📆 **Last 7 Days** (↓recv ↑sent)\n${dailyLines}\n\n` +
-          `📋 **30-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
+          `📆 **Last ${days} Day${days === 1 ? '' : 's'}** (↓recv ↑sent)\n${dailyLines}\n\n` +
+          `📋 **${days}-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
         ephemeral: true,
       });
       return;
