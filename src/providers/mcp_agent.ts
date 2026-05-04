@@ -1,0 +1,210 @@
+import path from 'path';
+import type { Messenger } from '../core/messenger.js';
+import { Inbox, QueuedMessage } from '../core/inbox.js';
+import type { RequestCounter } from '../core/counter.js';
+import type { Scheduler } from '../core/scheduler.js';
+import { getClaudeDiscordPromptSignatures } from '../core/tool_contract.js';
+import { buildDeferredReplyMarker, consumeDeferredReplies, writePendingQueueSnapshot } from '../core/queue_state.js';
+import { buildIncomingMessagePrompt } from '../core/prompt_helpers.js';
+import { BaseProvider } from './provider.js';
+import { BaseAgent } from './base_agent.js';
+import { logger } from '../core/logger.js';
+
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
+export interface ProviderConstructorArgs {
+  channelId: string;
+  messenger: Messenger;
+  workspaceDir: string;
+  sessionKey: string;
+}
+
+export interface McpAgentConfig {
+  /** Short identifier used in log tags (e.g. "claude", "codex"). */
+  providerName: string;
+  /** Factory that creates a fresh provider instance for each session/retry. */
+  createProvider: (args: ProviderConstructorArgs) => BaseProvider;
+  /** Substring matched against error messages to classify auth failures as fatal. */
+  fatalAuthErrorMatch: string;
+  /** Optional extra lines appended to the prompt suffix (provider-specific guidance). */
+  extraPromptLines?: string[];
+}
+
+/**
+ * Shared agent implementation for providers that route Discord tools through
+ * the Kaede MCP server (currently Claude and Codex). Differences between
+ * providers are passed in via {@link McpAgentConfig}.
+ */
+export class McpAgent extends BaseAgent {
+  model: string;
+  reasoningEffort: ReasoningEffort | '' = '';
+  messenger: Messenger;
+  queue = new Inbox();
+  readonly counter: RequestCounter;
+  readonly scheduler: Scheduler;
+  readonly sessionKey: string;
+  readonly botUserId: string;
+
+  private readonly workspaceDir: string;
+  private readonly config: McpAgentConfig;
+  protected provider: BaseProvider;
+
+  constructor(
+    config: McpAgentConfig,
+    messenger: Messenger,
+    workspaceDir: string,
+    model: string,
+    counter: RequestCounter,
+    scheduler: Scheduler,
+    sessionKey?: string,
+    botUserId?: string,
+  ) {
+    super();
+    this.config = config;
+    this.messenger = messenger;
+    this.workspaceDir = workspaceDir;
+    this.model = model;
+    this.counter = counter;
+    this.scheduler = scheduler;
+    this.sessionKey = sessionKey ?? messenger.channelId;
+    this.botUserId = botUserId ?? '';
+    this.provider = this.spawnProvider();
+  }
+
+  sendToTerminal(text: string): void {
+    this.provider.sendToTerminal(text);
+  }
+
+  protected logTag(): string {
+    return `${this.config.providerName}:${this.model || 'default'}`;
+  }
+
+  protected async beforeIteration(): Promise<void> {
+    await this.syncPendingQueueSnapshot();
+  }
+
+  protected buildPrompt(items: QueuedMessage[]): string {
+    const baseLines = [
+      `You are an AI agent running inside ${this.provider.getRuntimeLabel()}.`,
+      `Your working directory is ${path.resolve(this.workspaceDir)}.`,
+      'Always respond in the same language as the user\'s message.',
+      'Only respond to messages directed at you based on context.',
+      'Use the Discord MCP tool to send responses. Preferred tool names are:',
+      ...getClaudeDiscordPromptSignatures(),
+      'If your provider exposes these tools with different names, use the equivalent Discord send_message tool.',
+      'When you need clarification or want the user to choose from options, prefer the Discord ask_user tool instead of only describing a question in plain text.',
+      ...(this.config.extraPromptLines ?? []),
+      'If send_message reports queued/new_messages_waiting, treat the current reply as stale and do not force it out.',
+      'When replying, use the channelId from the message and include messageId when replying to a specific message.',
+    ];
+    return buildIncomingMessagePrompt(items, {
+      includeAttachments: true,
+      fileNoteTemplate: '\n\nAttached files (read them from disk if needed): {files}',
+      suffix: baseLines.join('\n'),
+    });
+  }
+
+  protected async attemptSend(items: QueuedMessage[], attempt: number): Promise<'done' | 'retry' | 'fatal'> {
+    const tag = this.logTag();
+    try {
+      const prompt = this.buildPrompt(items);
+      logger.log(`[${tag}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
+
+      this.counter.startRequest(tag, items.length);
+      try {
+        await this.provider.sendPrompt(prompt, {
+          model: this.model || undefined,
+          reasoningEffort: this.reasoningEffort || undefined,
+        });
+        await this.restoreDeferredReplies();
+      } finally {
+        this.counter.finalizeRequest();
+      }
+
+      logger.log(`[${tag}] Prompt completed`);
+      return 'done';
+    } catch (err) {
+      const msg = (err as Error).message || '';
+      logger.log(`[${tag}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);
+
+      this.provider.dispose();
+      const isFatal = msg.toLowerCase().includes(this.config.fatalAuthErrorMatch.toLowerCase()) || attempt >= this.maxRetries;
+      this.provider = this.spawnProvider();
+
+      if (isFatal) {
+        logger.error(`[${tag}] Error:`, err);
+        await this.messenger.sendError(msg);
+        return 'fatal';
+      }
+
+      return 'retry';
+    }
+  }
+
+  async dispose(): Promise<void> {
+    this.queue.abort();
+    await this.syncPendingQueueSnapshot();
+    this.messenger.dispose();
+    this.provider.dispose();
+  }
+
+  async deleteSession(): Promise<void> {
+    await this.provider.deleteSession();
+    await this.syncPendingQueueSnapshot();
+  }
+
+  private async syncPendingQueueSnapshot(): Promise<void> {
+    try {
+      await writePendingQueueSnapshot(
+        this.sessionKey,
+        this.queue.snapshot().map(item => ({
+          id: item.message.id,
+          channelId: item.message.channelId,
+          author: item.message.author,
+          content: item.message.content,
+          attachments: item.attachments,
+          files: item.files,
+        })),
+      );
+    } catch (err) {
+      logger.error(`[${this.logTag()}] Failed to sync pending queue snapshot:`, err);
+    }
+  }
+
+  private async restoreDeferredReplies(): Promise<void> {
+    try {
+      const deferredReplies = await consumeDeferredReplies(this.sessionKey);
+      if (deferredReplies.length === 0) return;
+
+      for (let index = deferredReplies.length - 1; index >= 0; index--) {
+        const deferred = deferredReplies[index];
+        const unsentMarker = buildDeferredReplyMarker(deferred);
+
+        this.queue.pushFront({
+          message: {
+            id: deferred.id || `unsent-${Date.now()}`,
+            channelId: deferred.channelId,
+            author: this.model,
+            content: unsentMarker,
+          },
+          attachments: [],
+          files: [],
+        });
+      }
+
+      await this.syncPendingQueueSnapshot();
+      logger.log(`[${this.logTag()}] Re-queued ${deferredReplies.length} deferred reply draft(s)`);
+    } catch (err) {
+      logger.error(`[${this.logTag()}] Failed to restore deferred replies:`, err);
+    }
+  }
+
+  private spawnProvider(): BaseProvider {
+    return this.config.createProvider({
+      channelId: this.messenger.channelId,
+      messenger: this.messenger,
+      workspaceDir: this.workspaceDir,
+      sessionKey: this.sessionKey,
+    });
+  }
+}

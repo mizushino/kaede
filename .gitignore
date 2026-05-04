@@ -4,6 +4,7 @@ dist/
 .env.*
 !.env.copilot
 !.env.claude
+!.env.codex
 *.log
 .DS_Store
 coverage/

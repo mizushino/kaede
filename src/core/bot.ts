@@ -1,5 +1,4 @@
-import { CopilotAgent } from '../providers/index.js';
-import { ClaudeAgent } from '../providers/index.js';
+import { CopilotAgent, ClaudeAgent, CodexAgent } from '../providers/index.js';
 import type { ContextUsageInfo, ReasoningEffort } from '../providers/provider.js';
 import { CopilotClientManager } from './client.js';
 import { RequestCounter } from './counter.js';
@@ -11,12 +10,14 @@ import { writeFile } from 'fs/promises';
 import { logger } from './logger.js';
 
 export type SessionScope = 'channel' | 'server';
-export type AgentProviderType = 'copilot' | 'claude';
+export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex'] as const;
+export type AgentProviderType = typeof AGENT_PROVIDER_TYPES[number];
 
 const DEFAULT_PROVIDER: AgentProviderType = 'copilot';
 const PROVIDER_MODEL_ENV: Record<AgentProviderType, string> = {
   copilot: 'COPILOT_MODEL',
   claude: 'CLAUDE_MODEL',
+  codex: 'CODEX_MODEL',
 };
 
 export interface Agent {
@@ -121,8 +122,8 @@ export abstract class Bot {
     const normalizedValue = value?.trim().toLowerCase();
     if (!normalizedValue) return DEFAULT_PROVIDER;
 
-    if (normalizedValue === 'copilot' || normalizedValue === 'claude') {
-      return normalizedValue;
+    if ((AGENT_PROVIDER_TYPES as readonly string[]).includes(normalizedValue)) {
+      return normalizedValue as AgentProviderType;
     }
 
     logger.log(`[BOT] Unknown provider "${value}" from AI_PROVIDER/AGENT_PROVIDER, falling back to ${DEFAULT_PROVIDER}`);
@@ -150,6 +151,16 @@ export abstract class Bot {
         );
       case 'claude':
         return new ClaudeAgent(
+          messenger,
+          this.workspaceDir,
+          this.model,
+          this.counter,
+          this.scheduler,
+          sessionKey,
+          this.getBotId(),
+        );
+      case 'codex':
+        return new CodexAgent(
           messenger,
           this.workspaceDir,
           this.model,

@@ -11,6 +11,7 @@ import {
 import path from 'path';
 import { execSync } from 'child_process';
 import { ClaudeCodeProvider } from '../providers/claude.js';
+import { CodexCodeProvider } from '../providers/codex.js';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
@@ -525,15 +526,37 @@ export class DiscordBot extends Bot {
     }));
   }
 
+  private buildIdNameAutocomplete(
+    models: Array<{ id: string; displayName: string }>,
+    focused: string,
+  ): Array<{ name: string; value: string }> {
+    return models
+      .map(m => ({ name: `${m.id} — ${m.displayName}`.slice(0, 100), value: m.id }))
+      .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
+      .slice(0, 25);
+  }
+
+  private buildModelTable(
+    models: Array<Record<string, string>>,
+    columns: Array<{ key: string; header: string }>,
+  ): string {
+    const widths = columns.map(col =>
+      Math.max(col.header.length, ...models.map(m => (m[col.key] ?? '').length)),
+    );
+    const pad = (text: string, width: number) => text.padEnd(width);
+    const header = columns.map((col, i) => pad(col.header, widths[i])).join('  ');
+    const divider = widths.map(w => '─'.repeat(w)).join('  ');
+    const lines = models.map(m =>
+      columns.map((col, i) => pad(m[col.key] ?? '', widths[i])).join('  '),
+    );
+    return `\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
+  }
+
   private async getModelAutocompleteChoices(focused: string): Promise<Array<{ name: string; value: string }>> {
     switch (this.providerType) {
       case 'claude':
         try {
-          const models = await this.getClaudeSdkModels();
-          return models
-            .map(m => ({ name: `${m.id} — ${m.displayName}`.slice(0, 100), value: m.id }))
-            .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
-            .slice(0, 25);
+          return this.buildIdNameAutocomplete(await this.getClaudeSdkModels(), focused);
         } catch (err) {
           logger.error('[BOT] Failed to list Claude models:', err);
           return [];
@@ -552,6 +575,10 @@ export class DiscordBot extends Bot {
         } catch {
           return [];
         }
+      case 'codex': {
+        const models = CodexCodeProvider.listModels().map(m => ({ id: m.id, displayName: m.displayName }));
+        return this.buildIdNameAutocomplete(models, focused);
+      }
     }
   }
 
@@ -563,12 +590,12 @@ export class DiscordBot extends Bot {
           if (models.length === 0) {
             return `**Current provider:** ${this.providerType}\n(No models reported by Claude Agent SDK)`;
           }
-          const idWidth = Math.max(5, ...models.map(m => m.id.length));
-          const nameWidth = Math.max(4, ...models.map(m => m.displayName.length));
-          const header = `${'MODEL'.padEnd(idWidth)}  ${'NAME'.padEnd(nameWidth)}  EFFORT`;
-          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(nameWidth)}  ${'─'.repeat(6)}`;
-          const lines = models.map(m => `${m.id.padEnd(idWidth)}  ${m.displayName.padEnd(nameWidth)}  ${m.effort}`);
-          return `**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
+          const table = this.buildModelTable(models as unknown as Array<Record<string, string>>, [
+            { key: 'id', header: 'MODEL' },
+            { key: 'displayName', header: 'NAME' },
+            { key: 'effort', header: 'EFFORT' },
+          ]);
+          return `**Available models (${models.length}):**\n${table}`;
         } catch (err) {
           return `❌ Failed to list Claude models: ${(err as Error).message}`;
         }
@@ -582,15 +609,26 @@ export class DiscordBot extends Bot {
             cost: m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?',
             reasoning: m.supportedReasoningEfforts?.join('/') ?? '-',
           }));
-          const idWidth = Math.max(5, ...rows.map(row => row.id.length));
-          const costWidth = Math.max(4, ...rows.map(row => row.cost.length));
-          const header = `${'MODEL'.padEnd(idWidth)}  ${'COST'.padEnd(costWidth)}  REASONING`;
-          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(costWidth)}  ${'─'.repeat(13)}`;
-          const lines = rows.map(row => `${row.id.padEnd(idWidth)}  ${row.cost.padEnd(costWidth)}  ${row.reasoning}`);
-          return `**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
+          const table = this.buildModelTable(rows, [
+            { key: 'id', header: 'MODEL' },
+            { key: 'cost', header: 'COST' },
+            { key: 'reasoning', header: 'REASONING' },
+          ]);
+          return `**Available models (${models.length}):**\n${table}`;
         } catch (err) {
           return `❌ Failed to list models: ${(err as Error).message}`;
         }
+      }
+      case 'codex': {
+        const models = CodexCodeProvider.listModels();
+        if (models.length === 0) {
+          return `**Current provider:** ${this.providerType}\n(No models configured. Set CODEX_MODELS to override the static list.)`;
+        }
+        const table = this.buildModelTable(models as unknown as Array<Record<string, string>>, [
+          { key: 'id', header: 'MODEL' },
+          { key: 'effort', header: 'EFFORT' },
+        ]);
+        return `**Available models (${models.length}):**\n${table}\n_Codex SDK does not expose a model-list API; this is a static fallback. Override with \`CODEX_MODELS=a,b,c\`._`;
       }
     }
   }

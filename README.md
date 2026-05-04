@@ -8,7 +8,7 @@ GitHub Copilot SDK / Claude Agent SDK を利用した Discord AI エージェン
 - 🖼️ 画像の添付・認識
 - 📊 ステータス表示（ツール実行状態のリアルタイム更新）
 - ⚡ イベント駆動型メッセージキューイング
-- 🔁 `AI_PROVIDER` による Copilot SDK / Claude Agent SDK 切り替え
+- 🔁 `AI_PROVIDER` による Copilot SDK / Claude Agent SDK / Codex SDK 切り替え
 - 🔀 `/model` コマンドによるモデルのランタイム切り替え
 - 🧩 ホットリロード対応プラグインシステム（AI が自らツールを作成・管理）
 - 📝 カスタムプロンプトコマンド（`.prompt.md` ファイルで自動登録）
@@ -86,12 +86,13 @@ npm start
 
 ## 🤖 AI Provider
 
-Kaede は **GitHub Copilot SDK** と **Claude Agent SDK** の 2 つの AI Provider に対応しています。`AI_PROVIDER` 環境変数で切り替えます。
+Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK** の 3 つの AI Provider に対応しています。`AI_PROVIDER` 環境変数で切り替えます。
 
 | `AI_PROVIDER` | 実行方式 | 主なモデル環境変数 |
 |---------------|----------|--------------------|
 | `copilot`（デフォルト） | GitHub Copilot SDK | `COPILOT_MODEL` |
 | `claude` | Claude Agent SDK (`claude`) | `CLAUDE_MODEL` |
+| `codex` | OpenAI Codex SDK (`codex`) | `CODEX_MODEL` |
 
 ### 切り替え方法
 
@@ -113,6 +114,7 @@ AGENT=kaede npm start   # .env.kaede を読み込んで起動
 # package.json のショートカット
 npm run copilot         # .env.copilot を使って GitHub Copilot SDK で起動
 npm run claude          # .env.claude を使って Claude Agent SDK で起動
+npm run codex           # .env.codex を使って Codex SDK で起動
 ```
 
 ---
@@ -224,6 +226,38 @@ MCP server は作業ディレクトリをこのリポジトリにして、コマ
 | `CLAUDE_ALLOWED_TOOLS` | Claude Agent SDK に渡す auto-allow ツール一覧（カンマ区切り） |
 | `CLAUDE_DISALLOWED_TOOLS` | Claude Agent SDK で禁止するツール一覧（カンマ区切り、既定で `AskUserQuestion` を含む） |
 | `REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
+
+---
+
+### 🟢 Codex Agent（`AI_PROVIDER=codex`）
+
+#### 認証
+
+OpenAI Codex CLI を `codex login` で認証済みであれば、Codex SDK は同じ認証情報を再利用します。`CODEX_API_KEY` を `.env` に設定して直接認証することもできます。
+
+#### Discord MCP サーバー
+
+Codex provider も Claude と同じく Discord MCP ツール（`mcp__discord__send_message` など）を使って返信します。Codex CLI には `--config mcp_servers.discord=...` を経由して、リポジトリ同梱の MCP サーバー（`npm run --silent mcp`）が自動接続されます。
+
+#### Codex 関連の環境変数
+
+| 環境変数 | 説明 |
+|----------|------|
+| `CODEX_MODEL` | 使用するモデル（例: `gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.3-codex`） |
+| `CODEX_MODELS` | `/models` の一覧表示で使う候補をカンマ区切りで上書き（既定: `gpt-5.5,gpt-5.4,gpt-5.4-mini,gpt-5.3-codex,gpt-5.3-codex-spark,gpt-5.2`） |
+| `CODEX_API_KEY` | Codex 用 API キー（`codex login` 済みなら不要） |
+| `CODEX_BASE_URL` | カスタム OpenAI 互換エンドポイント |
+| `CODEX_PATH` | `codex` 実行ファイルのパス（既定: SDK 同梱の native binary を自動選択） |
+| `CODEX_SANDBOX_MODE` | サンドボックス（`read-only` / `workspace-write` / `danger-full-access`、既定: `workspace-write`） |
+| `CODEX_APPROVAL_POLICY` | 承認ポリシー（`never` / `on-failure`、既定: `never`） |
+| `CODEX_NETWORK_DISABLED` | 設定するとサンドボックス内のネットワークを無効化 |
+| `CODEX_WEB_SEARCH_DISABLED` | 設定すると組み込みウェブ検索を無効化 |
+| `CODEX_CONFIG_JSON` | 追加の `--config` を JSON で注入（トップレベルの TOML キーへ展開） |
+| `REASONING_EFFORT` | Codex の思考レベル（`minimal` / `low` / `medium` / `high` / `xhigh`） |
+
+#### ⚠️ 承認モデルの注意
+
+Codex SDK には Claude / Copilot のような外部承認コールバックが用意されていません。そのため `CODEX_APPROVAL_POLICY=on-request` や `untrusted` を設定すると、codex CLI が stdin で承認待ちになりボットが応答を返せなくなります。これを避けるため、本実装では `on-request` / `untrusted` が指定されても自動的に `never` にフォールバックし、警告ログを出します。承認制御が必要な場合は `CODEX_SANDBOX_MODE` を `read-only` にする等で代替してください。
 
 ## 🌐 セッションスコープ
 
