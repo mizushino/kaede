@@ -1,5 +1,8 @@
-import { CopilotClient } from '@github/copilot-sdk';
+import type { CopilotClient } from '@github/copilot-sdk';
+import { loadOptionalSdk } from './optional_sdk.js';
 import { logger } from './logger.js';
+
+type CopilotSdkModule = typeof import('@github/copilot-sdk');
 
 export class CopilotClientManager {
   private client: CopilotClient | null = null;
@@ -17,6 +20,7 @@ export class CopilotClientManager {
     }
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
+        const sdk = await loadOptionalSdk<CopilotSdkModule>('@github/copilot-sdk');
         const opts: Record<string, unknown> = { logLevel: 'warning' };
         const isByok = !!process.env.COPILOT_PROVIDER_BASE_URL;
         if (process.env.GITHUB_TOKEN) {
@@ -24,7 +28,7 @@ export class CopilotClientManager {
         } else if (!isByok) {
           opts.useLoggedInUser = true;
         }
-        const client = new CopilotClient(opts);
+        const client = new sdk.CopilotClient(opts);
         await client.start();
         if (this.shuttingDown) {
           await client.stop().catch(() => {});

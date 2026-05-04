@@ -10,7 +10,6 @@ import {
 } from 'discord.js';
 import path from 'path';
 import { execSync } from 'child_process';
-import { ClaudeCodeProvider } from '../providers/claude.js';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
@@ -376,13 +375,13 @@ export class DiscordBot extends Bot {
         await interaction.deferReply({ ephemeral: true });
         await interaction.editReply(await this.buildModelListReply());
       } else if (sub === 'get') {
-        const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
+        const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
         await interaction.reply({ content: `Current model: \`${agent.model}\`${current}`, ephemeral: true });
       } else if (sub === 'set') {
         const modelId = interaction.options.getString('model_id', true);
         const effort = (interaction.options.getString('effort') ?? '') as 'low' | 'medium' | 'high' | 'xhigh' | '';
-        const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
+        const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         await agent.setModel(modelId, effort);
         const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
         await interaction.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
@@ -498,7 +497,7 @@ export class DiscordBot extends Bot {
       }
 
       // Send to agent
-      const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
+      const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
       const incoming = {
         id: interaction.id,
         channelId: interaction.channelId,
@@ -516,82 +515,55 @@ export class DiscordBot extends Bot {
     }
   }
 
-  private async getClaudeSdkModels(): Promise<Array<{ id: string; displayName: string; effort: string }>> {
-    const models = await ClaudeCodeProvider.listModels({ workspaceDir: process.env.WORKSPACE_DIR });
-    return models.map(m => ({
-      id: m.value,
-      displayName: m.displayName,
-      effort: m.supportsEffort && m.supportedEffortLevels?.length ? m.supportedEffortLevels.join('/') : '-',
-    }));
+  private async getModelListing(): Promise<import('../providers/base_agent.js').ModelListing> {
+    await this.loadAgentClass();
+    const AgentCtor = this.agentClass as { listModels?: () => Promise<import('../providers/base_agent.js').ModelListing> };
+    if (!AgentCtor.listModels) {
+      return { models: [], columns: [{ key: 'id', header: 'MODEL' }] };
+    }
+    return AgentCtor.listModels();
+  }
+
+  private buildModelTable(
+    models: Array<Record<string, string>>,
+    columns: Array<{ key: string; header: string }>,
+  ): string {
+    const widths = columns.map(col =>
+      Math.max(col.header.length, ...models.map(m => (m[col.key] ?? '').length)),
+    );
+    const pad = (text: string, width: number) => text.padEnd(width);
+    const header = columns.map((col, i) => pad(col.header, widths[i])).join('  ');
+    const divider = widths.map(w => '─'.repeat(w)).join('  ');
+    const lines = models.map(m =>
+      columns.map((col, i) => pad(m[col.key] ?? '', widths[i])).join('  '),
+    );
+    return `\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
   }
 
   private async getModelAutocompleteChoices(focused: string): Promise<Array<{ name: string; value: string }>> {
-    switch (this.providerType) {
-      case 'claude':
-        try {
-          const models = await this.getClaudeSdkModels();
-          return models
-            .map(m => ({ name: `${m.id} — ${m.displayName}`.slice(0, 100), value: m.id }))
-            .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
-            .slice(0, 25);
-        } catch (err) {
-          logger.error('[BOT] Failed to list Claude models:', err);
-          return [];
-        }
-      case 'copilot':
-        try {
-          const client = await this.clientManager.getClient();
-          const models = await client.listModels();
-          return models
-            .map(m => ({
-              name: m.billing?.multiplier != null ? `${m.id} (${m.billing.multiplier}x)` : m.id,
-              value: m.id,
-            }))
-            .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
-            .slice(0, 25);
-        } catch {
-          return [];
-        }
+    try {
+      const { models } = await this.getModelListing();
+      return models
+        .map(m => ({ name: m.autocompleteLabel.slice(0, 100), value: m.id }))
+        .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
+        .slice(0, 25);
+    } catch (err) {
+      logger.error(`[BOT] Failed to list models for ${this.providerType}:`, err);
+      return [];
     }
   }
 
   private async buildModelListReply(): Promise<string> {
-    switch (this.providerType) {
-      case 'claude': {
-        try {
-          const models = await this.getClaudeSdkModels();
-          if (models.length === 0) {
-            return `**Current provider:** ${this.providerType}\n(No models reported by Claude Agent SDK)`;
-          }
-          const idWidth = Math.max(5, ...models.map(m => m.id.length));
-          const nameWidth = Math.max(4, ...models.map(m => m.displayName.length));
-          const header = `${'MODEL'.padEnd(idWidth)}  ${'NAME'.padEnd(nameWidth)}  EFFORT`;
-          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(nameWidth)}  ${'─'.repeat(6)}`;
-          const lines = models.map(m => `${m.id.padEnd(idWidth)}  ${m.displayName.padEnd(nameWidth)}  ${m.effort}`);
-          return `**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
-        } catch (err) {
-          return `❌ Failed to list Claude models: ${(err as Error).message}`;
-        }
+    try {
+      const { models, columns, footnote } = await this.getModelListing();
+      if (models.length === 0) {
+        return `**Current provider:** ${this.providerType}\n(No models reported)`;
       }
-      case 'copilot': {
-        try {
-          const client = await this.clientManager.getClient();
-          const models = await client.listModels();
-          const rows = models.map(m => ({
-            id: m.id,
-            cost: m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?',
-            reasoning: m.supportedReasoningEfforts?.join('/') ?? '-',
-          }));
-          const idWidth = Math.max(5, ...rows.map(row => row.id.length));
-          const costWidth = Math.max(4, ...rows.map(row => row.cost.length));
-          const header = `${'MODEL'.padEnd(idWidth)}  ${'COST'.padEnd(costWidth)}  REASONING`;
-          const divider = `${'─'.repeat(idWidth)}  ${'─'.repeat(costWidth)}  ${'─'.repeat(13)}`;
-          const lines = rows.map(row => `${row.id.padEnd(idWidth)}  ${row.cost.padEnd(costWidth)}  ${row.reasoning}`);
-          return `**Available models (${models.length}):**\n\`\`\`\n${header}\n${divider}\n${lines.join('\n')}\n\`\`\``;
-        } catch (err) {
-          return `❌ Failed to list models: ${(err as Error).message}`;
-        }
-      }
+      const table = this.buildModelTable(models, columns);
+      const body = `**Available models (${models.length}):**\n${table}`;
+      return footnote ? `${body}\n${footnote}` : body;
+    } catch (err) {
+      return `❌ Failed to list models: ${(err as Error).message}`;
     }
   }
 
@@ -638,7 +610,7 @@ export class DiscordBot extends Bot {
         }
       }
 
-      const agent = this.getOrCreateAgent(message.channel.id, message.guildId ?? undefined);
+      const agent = await this.getOrCreateAgent(message.channel.id, message.guildId ?? undefined);
       const incoming = {
         id: message.id,
         channelId: message.channel.id,
@@ -699,7 +671,9 @@ export class DiscordBot extends Bot {
     }
 
     try {
-      await this.clientManager.warmup();
+      // Surfaces missing-SDK errors early and warms shared resources
+      // (e.g. the Copilot client) before the bot accepts traffic.
+      await this.warmupProvider();
       await this.discord.login(token);
       this.scheduler.restore();
       logger.log('[BOT] Connected to Discord');

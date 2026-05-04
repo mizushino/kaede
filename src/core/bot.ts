@@ -1,7 +1,4 @@
-import { CopilotAgent } from '../providers/index.js';
-import { ClaudeAgent } from '../providers/index.js';
 import type { ContextUsageInfo, ReasoningEffort } from '../providers/provider.js';
-import { CopilotClientManager } from './client.js';
 import { RequestCounter } from './counter.js';
 import { Scheduler } from './scheduler.js';
 import type { Messenger } from './messenger.js';
@@ -11,12 +8,19 @@ import { writeFile } from 'fs/promises';
 import { logger } from './logger.js';
 
 export type SessionScope = 'channel' | 'server';
-export type AgentProviderType = 'copilot' | 'claude';
+export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex'] as const;
+export type AgentProviderType = typeof AGENT_PROVIDER_TYPES[number];
 
 const DEFAULT_PROVIDER: AgentProviderType = 'copilot';
 const PROVIDER_MODEL_ENV: Record<AgentProviderType, string> = {
   copilot: 'COPILOT_MODEL',
   claude: 'CLAUDE_MODEL',
+  codex: 'CODEX_MODEL',
+};
+const PROVIDER_SDK_PACKAGE: Record<AgentProviderType, string> = {
+  copilot: '@github/copilot-sdk',
+  claude: '@anthropic-ai/claude-agent-sdk',
+  codex: '@openai/codex-sdk',
 };
 
 export interface Agent {
@@ -39,7 +43,6 @@ export abstract class Bot {
   protected readonly providerType: AgentProviderType;
   protected readonly model: string;
   protected readonly sessionScope: SessionScope;
-  protected readonly clientManager = new CopilotClientManager();
   protected readonly counter: RequestCounter;
   protected readonly scheduler: Scheduler;
   protected sessions = new Map<string, Agent>();
@@ -68,6 +71,56 @@ export abstract class Bot {
   protected abstract createMessenger(channelId: string): Messenger;
   protected abstract getBotId(): string;
 
+  /**
+   * Lazily-loaded agent constructor for the active provider. Populated by
+   * `loadAgentClass()` on first need so that SDKs for unselected providers
+   * are never imported.
+   */
+  protected agentClass: any = null;
+
+  /**
+   * Loads the agent class for the active provider via dynamic import. The
+   * provider's SDK is listed in `optionalDependencies`, so this is the point
+   * where a missing SDK surfaces a clear error.
+   */
+  protected async loadAgentClass(): Promise<void> {
+    if (this.agentClass) return;
+    const sdkName = PROVIDER_SDK_PACKAGE[this.providerType];
+    try {
+      switch (this.providerType) {
+        case 'copilot': {
+          const mod = await import('../providers/copilot_agent.js');
+          this.agentClass = mod.CopilotAgent;
+          return;
+        }
+        case 'claude': {
+          const mod = await import('../providers/claude_agent.js');
+          this.agentClass = mod.ClaudeAgent;
+          return;
+        }
+        case 'codex': {
+          const mod = await import('../providers/codex_agent.js');
+          this.agentClass = mod.CodexAgent;
+          return;
+        }
+      }
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      const message = (err as Error).message ?? '';
+      if (
+        code === 'ERR_MODULE_NOT_FOUND' ||
+        code === 'MODULE_NOT_FOUND' ||
+        message.includes(sdkName)
+      ) {
+        throw new Error(
+          `Optional dependency "${sdkName}" is required for provider "${this.providerType}" but is not installed. ` +
+          `Install it with: npm install ${sdkName}`,
+        );
+      }
+      throw err;
+    }
+  }
+
   protected isDuplicate(messageId: string): boolean {
     if (this.processedMessages.has(messageId)) return true;
     this.processedMessages.add(messageId);
@@ -89,11 +142,23 @@ export abstract class Bot {
     return `${this.agentName}_${scopeId}`;
   }
 
-  protected getOrCreateAgent(channelId: string, guildId?: string): Agent {
+  /**
+   * Pre-initialize the active provider's resources (e.g. shared SDK client)
+   * to reduce first-message latency. Safe to call multiple times.
+   */
+  async warmupProvider(): Promise<void> {
+    await this.loadAgentClass();
+    if (this.agentClass && typeof this.agentClass.warmup === 'function') {
+      await this.agentClass.warmup();
+    }
+  }
+
+  protected async getOrCreateAgent(channelId: string, guildId?: string): Promise<Agent> {
     const sessionKey = this.resolveSessionKey(channelId, guildId);
     let agent = this.sessions.get(sessionKey);
     if (!agent) {
       logger.log(`[BOT] Creating ${this.providerType} agent (model: ${this.model || 'default'}, scope: ${this.sessionScope}) for ${this.sessionScope === 'server' ? 'server' : 'channel'} ${sessionKey}`);
+      await this.loadAgentClass();
       const messenger = this.createMessenger(channelId);
       agent = this.createAgent(messenger, sessionKey);
       this.sessions.set(sessionKey, agent);
@@ -121,8 +186,8 @@ export abstract class Bot {
     const normalizedValue = value?.trim().toLowerCase();
     if (!normalizedValue) return DEFAULT_PROVIDER;
 
-    if (normalizedValue === 'copilot' || normalizedValue === 'claude') {
-      return normalizedValue;
+    if ((AGENT_PROVIDER_TYPES as readonly string[]).includes(normalizedValue)) {
+      return normalizedValue as AgentProviderType;
     }
 
     logger.log(`[BOT] Unknown provider "${value}" from AI_PROVIDER/AGENT_PROVIDER, falling back to ${DEFAULT_PROVIDER}`);
@@ -135,36 +200,25 @@ export abstract class Bot {
   }
 
   private createAgent(messenger: Messenger, sessionKey: string): Agent {
-    switch (this.providerType) {
-      case 'copilot':
-        return new CopilotAgent(
-          messenger,
-          this.workspaceDir,
-          this.functionsDir,
-          this.model,
-          this.clientManager,
-          this.counter,
-          this.scheduler,
-          sessionKey,
-          this.getBotId(),
-        );
-      case 'claude':
-        return new ClaudeAgent(
-          messenger,
-          this.workspaceDir,
-          this.model,
-          this.counter,
-          this.scheduler,
-          sessionKey,
-          this.getBotId(),
-        );
+    const AgentCtor = this.agentClass;
+    if (!AgentCtor) {
+      throw new Error('Agent class not loaded; call loadAgentClass() first.');
     }
+    return new AgentCtor(
+      messenger,
+      this.workspaceDir,
+      this.model,
+      this.counter,
+      this.scheduler,
+      sessionKey,
+      this.getBotId(),
+    );
   }
 
   /** Called by Scheduler when a cron job fires. */
   private async onScheduleFire(entry: import('./scheduler.js').ScheduleEntry): Promise<void> {
     logger.log(`[BOT] Schedule fired: "${entry.id}" → ch:${entry.channelId}`);
-    const agent = this.getOrCreateAgent(entry.channelId, entry.guildId);
+    const agent = await this.getOrCreateAgent(entry.channelId, entry.guildId);
     const incoming = {
       id: `schedule_${entry.id}_${Date.now()}`,
       channelId: entry.channelId,
@@ -186,7 +240,9 @@ export abstract class Bot {
     );
     this.sessions.clear();
     this.counter.flush();
-    await this.clientManager.shutdown();
+    if (this.agentClass && typeof this.agentClass.shutdownProcess === 'function') {
+      await this.agentClass.shutdownProcess();
+    }
     logger.log('[BOT] Disconnected');
   }
 }
