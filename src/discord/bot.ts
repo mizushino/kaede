@@ -10,8 +10,6 @@ import {
 } from 'discord.js';
 import path from 'path';
 import { execSync } from 'child_process';
-import { ClaudeCodeProvider } from '../providers/claude.js';
-import { CodexCodeProvider } from '../providers/codex.js';
 import { Bot } from '../core/bot.js';
 import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
@@ -377,13 +375,13 @@ export class DiscordBot extends Bot {
         await interaction.deferReply({ ephemeral: true });
         await interaction.editReply(await this.buildModelListReply());
       } else if (sub === 'get') {
-        const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
+        const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
         await interaction.reply({ content: `Current model: \`${agent.model}\`${current}`, ephemeral: true });
       } else if (sub === 'set') {
         const modelId = interaction.options.getString('model_id', true);
         const effort = (interaction.options.getString('effort') ?? '') as 'low' | 'medium' | 'high' | 'xhigh' | '';
-        const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
+        const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         await agent.setModel(modelId, effort);
         const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
         await interaction.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
@@ -499,7 +497,7 @@ export class DiscordBot extends Bot {
       }
 
       // Send to agent
-      const agent = this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
+      const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
       const incoming = {
         id: interaction.id,
         channelId: interaction.channelId,
@@ -518,6 +516,7 @@ export class DiscordBot extends Bot {
   }
 
   private async getClaudeSdkModels(): Promise<Array<{ id: string; displayName: string; effort: string }>> {
+    const { ClaudeCodeProvider } = await import('../providers/claude.js');
     const models = await ClaudeCodeProvider.listModels({ workspaceDir: process.env.WORKSPACE_DIR });
     return models.map(m => ({
       id: m.value,
@@ -576,6 +575,7 @@ export class DiscordBot extends Bot {
           return [];
         }
       case 'codex': {
+        const { CodexCodeProvider } = await import('../providers/codex.js');
         const models = CodexCodeProvider.listModels().map(m => ({ id: m.id, displayName: m.displayName }));
         return this.buildIdNameAutocomplete(models, focused);
       }
@@ -620,6 +620,7 @@ export class DiscordBot extends Bot {
         }
       }
       case 'codex': {
+        const { CodexCodeProvider } = await import('../providers/codex.js');
         const models = CodexCodeProvider.listModels();
         if (models.length === 0) {
           return `**Current provider:** ${this.providerType}\n(No models configured. Set CODEX_MODELS to override the static list.)`;
@@ -676,7 +677,7 @@ export class DiscordBot extends Bot {
         }
       }
 
-      const agent = this.getOrCreateAgent(message.channel.id, message.guildId ?? undefined);
+      const agent = await this.getOrCreateAgent(message.channel.id, message.guildId ?? undefined);
       const incoming = {
         id: message.id,
         channelId: message.channel.id,
@@ -737,7 +738,9 @@ export class DiscordBot extends Bot {
     }
 
     try {
-      await this.clientManager.warmup();
+      if (this.providerType === 'copilot') {
+        await this.clientManager.warmup();
+      }
       await this.discord.login(token);
       this.scheduler.restore();
       logger.log('[BOT] Connected to Discord');

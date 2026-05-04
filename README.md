@@ -43,6 +43,17 @@ cd kaede
 npm install
 ```
 
+> **Note:** 各 Provider の SDK（`@github/copilot-sdk` / `@anthropic-ai/claude-agent-sdk` / `@openai/codex-sdk`）は `optionalDependencies` として定義されています。`npm install` でも全部インストールされますが、利用しない SDK のインストールに失敗しても起動には影響しません。利用中の Provider の SDK が見つからない場合のみ、起動時に分かりやすいエラーが表示されます。
+>
+> 必要な SDK だけインストールしたい場合は、`npm install --omit=optional` の後に使う SDK だけ個別にインストールしてください。
+>
+> ```sh
+> npm install --omit=optional
+> npm install @github/copilot-sdk        # Copilot を使う場合
+> # npm install @anthropic-ai/claude-agent-sdk  # Claude を使う場合
+> # npm install @openai/codex-sdk        # Codex を使う場合
+> ```
+
 ### 5. 環境変数の設定
 
 `.env.claude`または`.env.copilot` をコピーして `.env` を作成:
