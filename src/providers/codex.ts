@@ -286,6 +286,7 @@ export class CodexCodeProvider extends BaseProvider {
           command: 'npm',
           args: ['run', '--silent', '--prefix', repoRoot, 'mcp'],
           env: mcpEnv,
+          default_tools_approval_mode: 'approve',
         },
       },
     };
