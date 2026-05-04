@@ -1,5 +1,4 @@
 import type { ContextUsageInfo, ReasoningEffort } from '../providers/provider.js';
-import { CopilotClientManager } from './client.js';
 import { RequestCounter } from './counter.js';
 import { Scheduler } from './scheduler.js';
 import type { Messenger } from './messenger.js';
@@ -44,7 +43,6 @@ export abstract class Bot {
   protected readonly providerType: AgentProviderType;
   protected readonly model: string;
   protected readonly sessionScope: SessionScope;
-  protected readonly clientManager = new CopilotClientManager();
   protected readonly counter: RequestCounter;
   protected readonly scheduler: Scheduler;
   protected sessions = new Map<string, Agent>();
@@ -78,7 +76,7 @@ export abstract class Bot {
    * `loadAgentClass()` on first need so that SDKs for unselected providers
    * are never imported.
    */
-  private agentClass: any = null;
+  protected agentClass: any = null;
 
   /**
    * Loads the agent class for the active provider via dynamic import. The
@@ -144,6 +142,17 @@ export abstract class Bot {
     return `${this.agentName}_${scopeId}`;
   }
 
+  /**
+   * Pre-initialize the active provider's resources (e.g. shared SDK client)
+   * to reduce first-message latency. Safe to call multiple times.
+   */
+  async warmupProvider(): Promise<void> {
+    await this.loadAgentClass();
+    if (this.agentClass && typeof this.agentClass.warmup === 'function') {
+      await this.agentClass.warmup();
+    }
+  }
+
   protected async getOrCreateAgent(channelId: string, guildId?: string): Promise<Agent> {
     const sessionKey = this.resolveSessionKey(channelId, guildId);
     let agent = this.sessions.get(sessionKey);
@@ -195,31 +204,15 @@ export abstract class Bot {
     if (!AgentCtor) {
       throw new Error('Agent class not loaded; call loadAgentClass() first.');
     }
-    switch (this.providerType) {
-      case 'copilot':
-        return new AgentCtor(
-          messenger,
-          this.workspaceDir,
-          this.functionsDir,
-          this.model,
-          this.clientManager,
-          this.counter,
-          this.scheduler,
-          sessionKey,
-          this.getBotId(),
-        );
-      case 'claude':
-      case 'codex':
-        return new AgentCtor(
-          messenger,
-          this.workspaceDir,
-          this.model,
-          this.counter,
-          this.scheduler,
-          sessionKey,
-          this.getBotId(),
-        );
-    }
+    return new AgentCtor(
+      messenger,
+      this.workspaceDir,
+      this.model,
+      this.counter,
+      this.scheduler,
+      sessionKey,
+      this.getBotId(),
+    );
   }
 
   /** Called by Scheduler when a cron job fires. */
@@ -247,7 +240,9 @@ export abstract class Bot {
     );
     this.sessions.clear();
     this.counter.flush();
-    await this.clientManager.shutdown();
+    if (this.agentClass && typeof this.agentClass.shutdownProcess === 'function') {
+      await this.agentClass.shutdownProcess();
+    }
     logger.log('[BOT] Disconnected');
   }
 }

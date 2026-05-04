@@ -8,6 +8,13 @@ import type { BaseProvider, ContextUsageInfo, ReasoningEffort } from './provider
 
 const DEFAULT_MAX_RETRIES = Number(process.env.MAX_RETRIES) || 5;
 
+export type ModelRow = Record<string, string> & { id: string; autocompleteLabel: string };
+export type ModelListing = {
+  models: ModelRow[];
+  columns: { key: string; header: string }[];
+  footnote?: string;
+};
+
 /**
  * Shared lifecycle scaffolding for every agent. Subclasses provide a provider,
  * a prompt builder and an attempt strategy. The base owns the message queue,

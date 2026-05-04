@@ -515,24 +515,13 @@ export class DiscordBot extends Bot {
     }
   }
 
-  private async getClaudeSdkModels(): Promise<Array<{ id: string; displayName: string; effort: string }>> {
-    const { ClaudeCodeProvider } = await import('../providers/claude.js');
-    const models = await ClaudeCodeProvider.listModels({ workspaceDir: process.env.WORKSPACE_DIR });
-    return models.map(m => ({
-      id: m.value,
-      displayName: m.displayName,
-      effort: m.supportsEffort && m.supportedEffortLevels?.length ? m.supportedEffortLevels.join('/') : '-',
-    }));
-  }
-
-  private buildIdNameAutocomplete(
-    models: Array<{ id: string; displayName: string }>,
-    focused: string,
-  ): Array<{ name: string; value: string }> {
-    return models
-      .map(m => ({ name: `${m.id} — ${m.displayName}`.slice(0, 100), value: m.id }))
-      .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
-      .slice(0, 25);
+  private async getModelListing(): Promise<import('../providers/base_agent.js').ModelListing> {
+    await this.loadAgentClass();
+    const AgentCtor = this.agentClass as { listModels?: () => Promise<import('../providers/base_agent.js').ModelListing> };
+    if (!AgentCtor.listModels) {
+      return { models: [], columns: [{ key: 'id', header: 'MODEL' }] };
+    }
+    return AgentCtor.listModels();
   }
 
   private buildModelTable(
@@ -552,85 +541,29 @@ export class DiscordBot extends Bot {
   }
 
   private async getModelAutocompleteChoices(focused: string): Promise<Array<{ name: string; value: string }>> {
-    switch (this.providerType) {
-      case 'claude':
-        try {
-          return this.buildIdNameAutocomplete(await this.getClaudeSdkModels(), focused);
-        } catch (err) {
-          logger.error('[BOT] Failed to list Claude models:', err);
-          return [];
-        }
-      case 'copilot':
-        try {
-          const client = await this.clientManager.getClient();
-          const models = await client.listModels();
-          return models
-            .map(m => ({
-              name: m.billing?.multiplier != null ? `${m.id} (${m.billing.multiplier}x)` : m.id,
-              value: m.id,
-            }))
-            .filter(choice => choice.name.toLowerCase().includes(focused) || choice.value.toLowerCase().includes(focused))
-            .slice(0, 25);
-        } catch {
-          return [];
-        }
-      case 'codex': {
-        const { CodexCodeProvider } = await import('../providers/codex.js');
-        const models = CodexCodeProvider.listModels().map(m => ({ id: m.id, displayName: m.displayName }));
-        return this.buildIdNameAutocomplete(models, focused);
-      }
+    try {
+      const { models } = await this.getModelListing();
+      return models
+        .map(m => ({ name: m.autocompleteLabel.slice(0, 100), value: m.id }))
+        .filter(c => c.name.toLowerCase().includes(focused) || c.value.toLowerCase().includes(focused))
+        .slice(0, 25);
+    } catch (err) {
+      logger.error(`[BOT] Failed to list models for ${this.providerType}:`, err);
+      return [];
     }
   }
 
   private async buildModelListReply(): Promise<string> {
-    switch (this.providerType) {
-      case 'claude': {
-        try {
-          const models = await this.getClaudeSdkModels();
-          if (models.length === 0) {
-            return `**Current provider:** ${this.providerType}\n(No models reported by Claude Agent SDK)`;
-          }
-          const table = this.buildModelTable(models as unknown as Array<Record<string, string>>, [
-            { key: 'id', header: 'MODEL' },
-            { key: 'displayName', header: 'NAME' },
-            { key: 'effort', header: 'EFFORT' },
-          ]);
-          return `**Available models (${models.length}):**\n${table}`;
-        } catch (err) {
-          return `❌ Failed to list Claude models: ${(err as Error).message}`;
-        }
+    try {
+      const { models, columns, footnote } = await this.getModelListing();
+      if (models.length === 0) {
+        return `**Current provider:** ${this.providerType}\n(No models reported)`;
       }
-      case 'copilot': {
-        try {
-          const client = await this.clientManager.getClient();
-          const models = await client.listModels();
-          const rows = models.map(m => ({
-            id: m.id,
-            cost: m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?',
-            reasoning: m.supportedReasoningEfforts?.join('/') ?? '-',
-          }));
-          const table = this.buildModelTable(rows, [
-            { key: 'id', header: 'MODEL' },
-            { key: 'cost', header: 'COST' },
-            { key: 'reasoning', header: 'REASONING' },
-          ]);
-          return `**Available models (${models.length}):**\n${table}`;
-        } catch (err) {
-          return `❌ Failed to list models: ${(err as Error).message}`;
-        }
-      }
-      case 'codex': {
-        const { CodexCodeProvider } = await import('../providers/codex.js');
-        const models = CodexCodeProvider.listModels();
-        if (models.length === 0) {
-          return `**Current provider:** ${this.providerType}\n(No models configured. Set CODEX_MODELS to override the static list.)`;
-        }
-        const table = this.buildModelTable(models as unknown as Array<Record<string, string>>, [
-          { key: 'id', header: 'MODEL' },
-          { key: 'effort', header: 'EFFORT' },
-        ]);
-        return `**Available models (${models.length}):**\n${table}\n_Codex SDK does not expose a model-list API; this is a static fallback. Override with \`CODEX_MODELS=a,b,c\`._`;
-      }
+      const table = this.buildModelTable(models, columns);
+      const body = `**Available models (${models.length}):**\n${table}`;
+      return footnote ? `${body}\n${footnote}` : body;
+    } catch (err) {
+      return `❌ Failed to list models: ${(err as Error).message}`;
     }
   }
 
@@ -738,9 +671,9 @@ export class DiscordBot extends Bot {
     }
 
     try {
-      if (this.providerType === 'copilot') {
-        await this.clientManager.warmup();
-      }
+      // Surfaces missing-SDK errors early and warms shared resources
+      // (e.g. the Copilot client) before the bot accepts traffic.
+      await this.warmupProvider();
       await this.discord.login(token);
       this.scheduler.restore();
       logger.log('[BOT] Connected to Discord');

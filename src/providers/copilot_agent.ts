@@ -1,3 +1,4 @@
+import path from 'path';
 import { CopilotClientManager } from '../core/client.js';
 import { FunctionLoader } from '../core/functions.js';
 import { Inbox, QueuedMessage } from '../core/inbox.js';
@@ -7,7 +8,7 @@ import { logger } from '../core/logger.js';
 import { buildIncomingMessagePrompt } from '../core/prompt_helpers.js';
 import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
-import { BaseAgent } from './base_agent.js';
+import { BaseAgent, type ModelListing } from './base_agent.js';
 import { CopilotCodeProvider, DEFAULT_REASONING_EFFORT, type CopilotSendErrorAction, type ReasoningEffort } from './copilot.js';
 
 export class CopilotAgent extends BaseAgent {
@@ -21,18 +22,59 @@ export class CopilotAgent extends BaseAgent {
 	readonly sessionKey: string;
 	readonly botUserId: string;
 
+	/** Shared Copilot client manager for the process. Lazily created. */
+	private static sharedClientManager: CopilotClientManager | null = null;
+
+	static getClientManager(): CopilotClientManager {
+		if (!this.sharedClientManager) {
+			this.sharedClientManager = new CopilotClientManager();
+		}
+		return this.sharedClientManager;
+	}
+
+	/** Pre-initialize the shared Copilot client to reduce first-message latency. */
+	static async warmup(): Promise<void> {
+		await this.getClientManager().warmup();
+	}
+
+	/** Shut down the shared Copilot client. Safe to call even if never used. */
+	static async shutdownProcess(): Promise<void> {
+		const mgr = this.sharedClientManager;
+		if (!mgr) return;
+		this.sharedClientManager = null;
+		await mgr.shutdown();
+	}
+
+	static async listModels(): Promise<ModelListing> {
+		const client = await this.getClientManager().getClient();
+		const models = await client.listModels();
+		return {
+			models: models.map(m => ({
+				id: m.id,
+				displayName: m.id,
+				cost: m.billing?.multiplier != null ? `${m.billing.multiplier}x` : '?',
+				reasoning: m.supportedReasoningEfforts?.join('/') ?? '-',
+				autocompleteLabel: m.billing?.multiplier != null ? `${m.id} (${m.billing.multiplier}x)` : m.id,
+			})),
+			columns: [
+				{ key: 'id', header: 'MODEL' },
+				{ key: 'cost', header: 'COST' },
+				{ key: 'reasoning', header: 'REASONING' },
+			],
+		};
+	}
+
 	private readonly clientManager: CopilotClientManager;
-	private readonly workspaceDir: string;
 	protected readonly provider: CopilotCodeProvider;
 
-	constructor(messenger: Messenger, workspaceDir: string, functionsDir: string, model: string, clientManager: CopilotClientManager, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string, botUserId?: string) {
+	constructor(messenger: Messenger, workspaceDir: string, model: string, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string, botUserId?: string) {
 		super();
 		this.messenger = messenger;
-		this.workspaceDir = workspaceDir;
 		this.model = model;
 		this.reasoningEffort = DEFAULT_REASONING_EFFORT;
-		this.clientManager = clientManager;
+		this.clientManager = CopilotAgent.getClientManager();
 		this.botUserId = botUserId ?? '';
+		const functionsDir = process.env.FUNCTIONS_DIR || path.join(workspaceDir, 'functions');
 		this.functionLoader = new FunctionLoader(functionsDir);
 		this.counter = counter;
 		this.scheduler = scheduler;
@@ -42,7 +84,7 @@ export class CopilotAgent extends BaseAgent {
 			messenger,
 			workspaceDir,
 			sessionKey: this.sessionKey,
-			clientManager,
+			clientManager: this.clientManager,
 			functionLoader: this.functionLoader,
 			permissionConfig: loadPermissionConfig(),
 			botUserId: this.botUserId,
