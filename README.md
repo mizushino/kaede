@@ -20,22 +20,14 @@ GitHub Copilot SDK / Claude Agent SDK / Codex SDK を利用した Discord AI エ
 
 👉 https://nodejs.org/ja/download
 
-### 2. Agent Clientのインストール
-
-(GitHubCopilot) GitHub CLI のインストール
-👉 https://github.com/cli/cli#installation
-
-(ClaudeCode) Claude Code のインストール
-👉 https://code.claude.com/docs/ja/overview
-
-### 3. リポジトリのクローン
+### 2. リポジトリのクローン
 
 ```sh
 git clone https://github.com/mizushino/kaede.git
 cd kaede
 ```
 
-### 4. 依存パッケージのインストール
+### 3. 依存パッケージのインストール
 
 ```sh
 npm install
@@ -52,7 +44,7 @@ npm install
 > # npm install @openai/codex-sdk        # Codex を使う場合
 > ```
 
-### 5. 環境変数の設定
+### 4. 環境変数の設定
 
 `.env.claude`または`.env.copilot` をコピーして `.env` を作成:
 
@@ -60,11 +52,11 @@ npm install
 cp .env.claude .env
 ```
 
-### 6. AI Provider の認証設定
+### 5. AI Provider の認証設定
 
-利用する Provider（GitHub Copilot または Claude Agent）に応じて認証情報を設定します。詳細は下記の [🤖 AI Provider](#-ai-provider) セクションを参照してください。
+利用する Providerに応じて認証情報を設定します。詳細は下記の [🤖 AI Provider](#-ai-provider) セクションを参照してください。
 
-### 7. Discord Bot の作成
+### 6. Discord Bot の作成
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) でアプリケーションを作成
 
@@ -87,7 +79,7 @@ cp .env.claude .env
 9. 連携タイプ → **ギルドのインストール**
 10. 生成された URL へアクセスして Bot をサーバーに追加
 
-### 8. 起動
+### 7. 起動
 
 ```sh
 npm start
@@ -134,7 +126,15 @@ npm run codex           # .env.codex を使って Codex SDK で起動
 
 以下のいずれかの方法で認証します:
 
-**方法 A: Personal Access Token（推奨）**
+**方法 A: `npx copilot login`（推奨）**
+
+Copilot CLI を起動して OAuth デバイスフローでログインします。トークンは OS のクレデンシャルストア（無ければ `~/.copilot/`）に保存されます。
+
+```sh
+npx copilot login
+```
+
+**方法 B: Personal Access Token**
 
 [GitHub Personal Access Tokens](https://github.com/settings/personal-access-tokens/new) で新しいトークンを作成し、以下の権限を付与してください:
 
@@ -142,12 +142,6 @@ npm run codex           # .env.codex を使って Codex SDK で起動
 - **Copilot Requests**
 
 生成したトークンを `.env` の `GITHUB_TOKEN` に設定します。
-
-**方法 B: `gh auth login`**
-
-`gh` CLI でログイン済みであれば、Copilot SDK はその認証情報を自動で利用できます。
-
-> ⚠️ **注意:** `gh auth login` の標準フローではアカウント全体の権限（リポジトリ操作・Issue・PR など）が `gh` に付与されます。最小権限で運用したい場合は方法 A（Copilot Chat / Copilot Requests のみの PAT）を推奨します。
 
 #### BYOK（Bring Your Own Key）
 
@@ -203,7 +197,7 @@ COPILOT_MAX_CONTEXT_WINDOW_TOKENS=262144
 Claude Code をインストールして起動し、ログインを済ませておけば、Claude Agent SDK は同じ認証情報を再利用します。
 
 ```sh
-claude   # 起動して画面の指示に従いログイン
+npx claude   # 起動して画面の指示に従いログイン
 ```
 
 **方法 B: API キー**
@@ -213,16 +207,6 @@ Anthropic Console で発行した API キーを `.env` の `ANTHROPIC_API_KEY` �
 ```sh
 ANTHROPIC_API_KEY=sk-ant-...
 ```
-
-#### Discord MCP サーバー
-
-Claude provider は Discord MCP ツール（例: `mcp__discord__send_message`）を使って返信します。このリポジトリには MCP サーバーも同梱しており、Claude Agent SDK 側へ毎回 MCP server 設定を注入します。
-
-```sh
-npm run --silent mcp
-```
-
-MCP server は作業ディレクトリをこのリポジトリにして、コマンド `npm run --silent mcp` で起動されます。`npm run` の通常出力は stdio MCP のハンドシェイクを壊すため、`--silent` を付ける必要があります。
 
 #### Claude 関連の環境変数
 
@@ -242,11 +226,7 @@ MCP server は作業ディレクトリをこのリポジトリにして、コマ
 
 #### 認証
 
-OpenAI Codex CLI を `codex login` で認証済みであれば、Codex SDK は同じ認証情報を再利用します。`CODEX_API_KEY` を `.env` に設定して直接認証することもできます。
-
-#### Discord MCP サーバー
-
-Codex provider も Claude と同じく Discord MCP ツール（`mcp__discord__send_message` など）を使って返信します。Codex CLI には `--config mcp_servers.discord=...` を経由して、リポジトリ同梱の MCP サーバー（`npm run --silent mcp`）が自動接続されます。
+OpenAI Codex CLI を `npx codex login` で認証済みであれば、Codex SDK は同じ認証情報を再利用します。`CODEX_API_KEY` を `.env` に設定して直接認証することもできます。
 
 #### Codex 関連の環境変数
 
@@ -254,7 +234,7 @@ Codex provider も Claude と同じく Discord MCP ツール（`mcp__discord__se
 |----------|------|
 | `CODEX_MODEL` | 使用するモデル（例: `gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.3-codex`） |
 | `CODEX_MODELS` | `/models` の一覧表示で使う候補をカンマ区切りで上書き（既定: `gpt-5.5,gpt-5.4,gpt-5.4-mini,gpt-5.3-codex,gpt-5.3-codex-spark,gpt-5.2`） |
-| `CODEX_API_KEY` | Codex 用 API キー（`codex login` 済みなら不要） |
+| `CODEX_API_KEY` | Codex 用 API キー（`npx codex login` 済みなら不要） |
 | `CODEX_BASE_URL` | カスタム OpenAI 互換エンドポイント |
 | `CODEX_PATH` | `codex` 実行ファイルのパス（既定: SDK 同梱の native binary を自動選択） |
 | `CODEX_SANDBOX_MODE` | サンドボックス（`read-only` / `workspace-write` / `danger-full-access`、既定: `workspace-write`） |
