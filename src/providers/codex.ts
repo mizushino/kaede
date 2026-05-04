@@ -20,8 +20,6 @@ import { BaseProvider } from './provider.js';
 import type { ProviderContext, ProviderOptions, ReasoningEffort } from './provider.js';
 import { logger } from '../core/logger.js';
 
-const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
-
 const DEFAULT_TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
 const THREAD_STATE_DIRNAME = 'codex-threads';
 
@@ -64,7 +62,6 @@ export class CodexCodeProvider extends BaseProvider {
   private codex?: Codex;
   private threadId: string | null = null;
   private threadStateLoaded = false;
-  private activeTurnDeadlineMs: number | null = null;
   private currentAbort?: AbortController;
 
   protected getIcon(): string {
@@ -73,11 +70,6 @@ export class CodexCodeProvider extends BaseProvider {
 
   protected getDisplayName(): string {
     return 'Codex SDK';
-  }
-
-  getRemainingTurnTimeMs(): number | null {
-    if (this.activeTurnDeadlineMs == null) return null;
-    return Math.max(0, this.activeTurnDeadlineMs - Date.now());
   }
 
   async setModel(): Promise<void> {
@@ -95,7 +87,6 @@ export class CodexCodeProvider extends BaseProvider {
   dispose(): void {
     this.currentAbort?.abort();
     this.currentAbort = undefined;
-    this.activeTurnDeadlineMs = null;
     super.dispose();
   }
 
@@ -121,8 +112,6 @@ export class CodexCodeProvider extends BaseProvider {
 
     const abort = new AbortController();
     this.currentAbort = abort;
-    this.activeTurnDeadlineMs = Date.now() + SESSION_TIMEOUT;
-    const timeout = setTimeout(() => abort.abort(), SESSION_TIMEOUT);
 
     const state: QueryState = { sentDiscordMessage: false };
     let turnFailed: string | null = null;
@@ -141,9 +130,7 @@ export class CodexCodeProvider extends BaseProvider {
     } catch (err) {
       throw err instanceof Error ? err : new Error(String(err));
     } finally {
-      clearTimeout(timeout);
       this.currentAbort = undefined;
-      this.activeTurnDeadlineMs = null;
       this.context.messenger.clearStatus();
       this.context.messenger.stopTyping();
     }

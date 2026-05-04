@@ -42,7 +42,6 @@ function resolveClaudeBinary(): string | undefined {
   return undefined;
 }
 
-const CLI_SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
 const USER_RESPONSE_TIMEOUT = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 
 interface QueryState {
@@ -112,7 +111,6 @@ export class ClaudeCodeProvider extends BaseProvider {
   private streamDead = false;
   private currentTurn?: PendingTurn;
   private currentSessionId?: string;
-  private timedOut = false;
 
   protected getIcon(): string {
     return '⚜️';
@@ -248,7 +246,6 @@ export class ClaudeCodeProvider extends BaseProvider {
   }
 
   dispose(): void {
-    this.timedOut = false;
     this.tearDownStream(new Error('claude provider disposed'));
     this.currentSessionId = undefined;
     super.dispose();
@@ -271,8 +268,6 @@ export class ClaudeCodeProvider extends BaseProvider {
   }
 
   async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
-    this.timedOut = false;
-
     const requestedModel = options?.model?.trim() || undefined;
     const requestedEffort = this.resolveEffort(options);
 
@@ -289,11 +284,6 @@ export class ClaudeCodeProvider extends BaseProvider {
         this.tearDownStream(new Error('claude model rejected; restarting stream'));
         await this.runTurn(prompt, options, undefined, requestedEffort);
       }
-    } catch (err) {
-      if (this.timedOut) {
-        throw new Error(`${this.name} query timed out after ${CLI_SESSION_TIMEOUT}ms`);
-      }
-      throw err;
     } finally {
       this.context.messenger.clearStatus();
       this.context.messenger.stopTyping();
@@ -338,25 +328,7 @@ export class ClaudeCodeProvider extends BaseProvider {
     logger.log(`[${this.name}] Sending turn prompt (signature ${signature}):\n${prompt.slice(0, 300)}`);
     queue.push(buildUserMessage(prompt));
 
-    let timedOutHere = false;
-    const timeout = setTimeout(() => {
-      timedOutHere = true;
-      this.timedOut = true;
-      void stream.interrupt().catch(err => {
-        logger.error(`[${this.name}] Failed to interrupt timed-out turn:`, err);
-      });
-    }, CLI_SESSION_TIMEOUT);
-
-    try {
-      await turnPromise;
-    } catch (err) {
-      if (timedOutHere) {
-        this.tearDownStream(new Error('claude turn timed out'));
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeout);
-    }
+    await turnPromise;
   }
 
   private computeStreamSignature(model: string | undefined, effort: string | undefined): string {
