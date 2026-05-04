@@ -240,7 +240,7 @@ You have a self-modifiable function system (functions dir: ${this.context.functi
 Tools: list_funcs, read_func, write_func, delete_func, run_func
 
 You can manage scheduled tasks (cron-based, timezone: Asia/Tokyo).
-Tools: add_schedule, list_schedules, remove_schedule, toggle_schedule
+Tools: add_schedule, list_schedules, remove_schedule
 When users ask to schedule something, convert their request to a cron expression and use add_schedule.
 
 IMPORTANT RULES:

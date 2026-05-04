@@ -182,18 +182,6 @@ export const DISCORD_TOOL_CONTRACTS: ToolContract[] = [
       required: ['id'],
     },
   },
-  {
-    name: 'toggle_schedule',
-    promptSignature: 'mcp__discord__toggle_schedule(id)',
-    description: 'Toggle a scheduled task on/off by ID.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Schedule ID to toggle' },
-      },
-      required: ['id'],
-    },
-  },
 ];
 
 export function getClaudeDiscordAllowedTools(): string[] {

@@ -189,17 +189,5 @@ export function createTools(ctx: ToolContext) {
         return removed ? { success: true } : { error: `Schedule "${id}" not found` };
       },
     }),
-
-    defineTool('toggle_schedule', {
-      description: 'Toggle a scheduled task on/off by ID',
-      parameters: z.object({
-        id: z.string().describe('Schedule ID to toggle'),
-      }),
-      skipPermission: true,
-      handler: async ({ id }) => {
-        const entry = ctx.scheduler.toggle(id);
-        return entry ? { success: true, schedule: entry } : { error: `Schedule "${id}" not found` };
-      },
-    }),
   ];
 }

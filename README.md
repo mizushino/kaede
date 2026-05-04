@@ -444,7 +444,6 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 | `add_schedule` | 📅 cronスケジュールの登録（タイムゾーン: Asia/Tokyo） |
 | `list_schedules` | 📋 登録済みスケジュールの一覧表示 |
 | `remove_schedule` | 🗑️ スケジュールの削除 |
-| `toggle_schedule` | ⏯️ スケジュールの有効/無効切り替え |
 
 自然言語で「毎朝9時にニュースをまとめて」と伝えると、AI がcron式に変換してスケジュール登録します。スケジュールは `workspace/schedules.json` に永続化され、再起動後も自動復元されます。
 

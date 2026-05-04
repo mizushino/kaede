@@ -147,7 +147,6 @@ export abstract class BaseProvider {
         return cron && description ? `${cron} → ${description}` : cron || description;
       }
       case 'remove_schedule':
-      case 'toggle_schedule':
         return readString('id');
       case 'get_messages':
       case 'get_channels':

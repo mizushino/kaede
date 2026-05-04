@@ -121,11 +121,6 @@ export class DiscordBot extends Bot {
           sub.setName('remove')
             .setDescription('Remove a scheduled task')
             .addStringOption(opt =>
-              opt.setName('id').setDescription('Schedule ID').setRequired(true).setAutocomplete(true)))
-        .addSubcommand(sub =>
-          sub.setName('toggle')
-            .setDescription('Enable/disable a scheduled task')
-            .addStringOption(opt =>
               opt.setName('id').setDescription('Schedule ID').setRequired(true).setAutocomplete(true))),
       new SlashCommandBuilder()
         .setName('function')
@@ -424,14 +419,6 @@ export class DiscordBot extends Bot {
         const id = interaction.options.getString('id', true);
         const removed = this.scheduler.remove(id);
         await interaction.reply({ content: removed ? `✅ Removed schedule \`${id}\`` : `❌ Schedule \`${id}\` not found`, ephemeral: true });
-      } else if (sub === 'toggle') {
-        const id = interaction.options.getString('id', true);
-        const entry = this.scheduler.toggle(id);
-        if (entry) {
-          await interaction.reply({ content: `${entry.enabled ? '✅ Enabled' : '⏸️ Disabled'} schedule \`${id}\``, ephemeral: true });
-        } else {
-          await interaction.reply({ content: `❌ Schedule \`${id}\` not found`, ephemeral: true });
-        }
       }
       return;
     }

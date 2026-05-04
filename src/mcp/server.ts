@@ -173,8 +173,6 @@ class KaedeMcpServer {
             return await this.listSchedules();
           case 'remove_schedule':
             return await this.removeSchedule(request.params.arguments);
-          case 'toggle_schedule':
-            return await this.toggleSchedule(request.params.arguments);
           case 'list_funcs':
             return await this.listFuncs();
           case 'read_func':
@@ -508,23 +506,6 @@ class KaedeMcpServer {
     if (removed) await this.writeSchedules(next);
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(removed ? { success: true } : { error: `Schedule "${parsed.id}" not found` }, null, 2) }],
-    };
-  }
-
-  private async toggleSchedule(args: unknown) {
-    const parsed = ScheduleIdSchema.parse(args);
-    const schedules = await this.readSchedules();
-    const entry = schedules.find(item => item.id === parsed.id);
-    if (!entry) {
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ error: `Schedule "${parsed.id}" not found` }, null, 2) }],
-      };
-    }
-
-    entry.enabled = !entry.enabled;
-    await this.writeSchedules(schedules);
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ success: true, schedule: entry }, null, 2) }],
     };
   }
 

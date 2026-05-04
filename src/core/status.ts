@@ -15,7 +15,6 @@ export const STATUS_ICON: Record<string, string> = {
   add_schedule:    '📅',
   list_schedules:   '📋',
   remove_schedule: '🗑️',
-  toggle_schedule: '⏯️',
   // Built-in: file operations
   view:           '📖',
   create:         '📝',

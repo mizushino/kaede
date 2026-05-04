@@ -130,22 +130,6 @@ export class Scheduler {
     return existed;
   }
 
-  /** Toggle a schedule's enabled state. */
-  toggle(id: string): ScheduleEntry | null {
-    const entry = this.entries.get(id);
-    if (!entry) return null;
-
-    entry.enabled = !entry.enabled;
-    if (entry.enabled) {
-      this.startTask(entry);
-    } else {
-      this.stopTask(id);
-    }
-    this.save();
-    logger.log(`[Scheduler] Toggled "${id}" → ${entry.enabled ? 'enabled' : 'disabled'}`);
-    return entry;
-  }
-
   /** List all schedule entries. */
   list(): ScheduleEntry[] {
     return [...this.entries.values()];
