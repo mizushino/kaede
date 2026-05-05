@@ -302,6 +302,23 @@ export class CodexCodeProvider extends BaseProvider {
     if (autoCompactTokenLimit) {
       config.model_auto_compact_token_limit = autoCompactTokenLimit;
     }
+
+    this.applyAgentsMdPathConfig(config);
+  }
+
+  private applyAgentsMdPathConfig(config: NonNullable<CodexOptions['config']>): void {
+    const agentsMdPath = process.env.AGENTS_MD_PATH?.trim();
+    if (!agentsMdPath) return;
+
+    const resolvedPath = path.resolve(agentsMdPath);
+    if (!existsSync(resolvedPath)) {
+      logger.error(`[${this.name}] AGENTS_MD_PATH not found: ${resolvedPath}`);
+      return;
+    }
+
+    config.model_instructions_file = resolvedPath;
+    config.project_doc_max_bytes = 0;
+    logger.log(`[${this.name}] Using custom AGENTS.md from: ${resolvedPath}`);
   }
 
   private buildThreadOptions(options: ProviderOptions | undefined): ThreadOptions {
