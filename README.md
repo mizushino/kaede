@@ -48,17 +48,17 @@ npm install
 
 #### Copilot を使用する場合
 ```sh
-cp .env.copilot .env
+cp .env.example.copilot .env
 ```
 
 #### Claude を使用する場合
 ```sh
-cp .env.claude .env
+cp .env.example.claude .env
 ```
 
 #### Codex を使用する場合
 ```sh
-cp .env.codex .env
+cp .env.example.codex .env
 ```
 
 ### 5. AI Provider の認証設定
@@ -120,11 +120,6 @@ AI_PROVIDER=claude CLAUDE_MODEL=sonnet npm start
 
 ```bash
 AGENT=kaede npm start   # .env.kaede を読み込んで起動
-
-# package.json のショートカット
-npm run copilot         # .env.copilot を使って GitHub Copilot SDK で起動
-npm run claude          # .env.claude を使って Claude Agent SDK で起動
-npm run codex           # .env.codex を使って Codex SDK で起動
 ```
 
 #### AIツールを無効化する

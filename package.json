@@ -6,9 +6,6 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "tsx src/index.ts",
-    "copilot": "AGENT=copilot npm start",
-    "claude": "AGENT=claude npm start",
-    "codex": "AGENT=codex npm start",
     "mcp": "tsx src/mcp/server.ts"
   },
   "dependencies": {
