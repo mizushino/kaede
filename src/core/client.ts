@@ -28,6 +28,12 @@ export class CopilotClientManager {
         } else if (!isByok) {
           opts.useLoggedInUser = true;
         }
+        // Copilot CLI 1.0.36+ requires COPILOT_MODEL at CLI startup when BYOK is
+        // active, even though we also pass `model` per session. Backfill from
+        // AGENT_MODEL so each agent's configured model is used.
+        if (isByok && !process.env.COPILOT_MODEL && process.env.AGENT_MODEL) {
+          process.env.COPILOT_MODEL = process.env.AGENT_MODEL;
+        }
         const client = new sdk.CopilotClient(opts);
         await client.start();
         if (this.shuttingDown) {
