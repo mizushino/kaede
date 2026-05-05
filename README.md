@@ -231,12 +231,12 @@ ANTHROPIC_API_KEY=sk-ant-...
 | 環境変数 | 説明 |
 |----------|------|
 | `AGENT_MODEL` | 使用するモデル（例: `sonnet`, `opus`） |
+| `AGENT_REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
 | `CLAUDE_COMMAND` | Claude Code 実行ファイルのパスまたはコマンド（既定: SDK 同梱の glibc/musl native binary を自動選択） |
 | `CLAUDE_ARGS` | Claude Agent SDK から Claude Code に追加する引数 |
 | `CLAUDE_PERMISSION_MODE` | Claude Agent SDK の permission mode（既定: `bypassPermissions`） |
 | `CLAUDE_ALLOWED_TOOLS` | Claude Agent SDK に渡す auto-allow ツール一覧（カンマ区切り） |
 | `CLAUDE_DISALLOWED_TOOLS` | Claude Agent SDK で禁止するツール一覧（カンマ区切り、既定で `AskUserQuestion` を含む） |
-| `AGENT_REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
 
 ---
 
@@ -251,6 +251,7 @@ OpenAI Codex CLI を `npx codex login` で認証済みであれば、Codex SDK �
 | 環境変数 | 説明 |
 |----------|------|
 | `AGENT_MODEL` | 使用するモデル（例: `gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.3-codex`） |
+| `AGENT_REASONING_EFFORT` | Codex の思考レベル（`minimal` / `low` / `medium` / `high` / `xhigh`） |
 | `CODEX_MODELS` | `/models` の一覧表示で使う候補をカンマ区切りで上書き（既定: `gpt-5.5,gpt-5.4,gpt-5.4-mini,gpt-5.3-codex,gpt-5.3-codex-spark,gpt-5.2`） |
 | `CODEX_API_KEY` | Codex 用 API キー（`npx codex login` 済みなら不要） |
 | `CODEX_BASE_URL` | カスタム OpenAI 互換エンドポイント |
@@ -260,7 +261,6 @@ OpenAI Codex CLI を `npx codex login` で認証済みであれば、Codex SDK �
 | `CODEX_NETWORK_DISABLED` | 設定するとサンドボックス内のネットワークを無効化 |
 | `CODEX_WEB_SEARCH_DISABLED` | 設定すると組み込みウェブ検索を無効化 |
 | `CODEX_CONFIG_JSON` | 追加の `--config` を JSON で注入（トップレベルの TOML キーへ展開） |
-| `AGENT_REASONING_EFFORT` | Codex の思考レベル（`minimal` / `low` / `medium` / `high` / `xhigh`） |
 
 #### ⚠️ 承認モデルの注意
 
