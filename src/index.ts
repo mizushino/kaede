@@ -1,6 +1,7 @@
 import './load-env.js';
 import { DiscordBot } from './discord/bot.js';
 import { logger } from './core/logger.js';
+import { killAllAcpChildren } from './providers/index.js';
 
 const bot = new DiscordBot();
 bot.start().catch(logger.error);
@@ -15,6 +16,7 @@ const onShutdown = async (signal?: string) => {
   // Force exit if graceful shutdown hangs
   const forceTimer = setTimeout(() => {
     logger.error('[BOT] Forced exit after timeout');
+    killAllAcpChildren();
     process.kill(process.pid, 'SIGKILL');
   }, 8_000);
   forceTimer.unref();

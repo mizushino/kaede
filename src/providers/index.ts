@@ -17,6 +17,7 @@ export { CodexAgent } from './codex_agent.js';
 export { GeminiCodeProvider } from './gemini.js';
 export { GeminiAgent } from './gemini_agent.js';
 export { AcpProvider } from './acp.js';
+export { killAllAcpChildren } from './acp.js';
 export { AcpAgent } from './acp_agent.js';
 export { GenericAcpProvider } from './acp_generic.js';
 export { GenericAcpAgent } from './acp_generic_agent.js';

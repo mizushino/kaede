@@ -145,7 +145,7 @@ export class McpAgent extends BaseAgent {
     this.queue.abort();
     await this.syncPendingQueueSnapshot();
     this.messenger.dispose();
-    this.provider.dispose();
+    await this.provider.dispose();
   }
 
   async deleteSession(): Promise<void> {

@@ -123,7 +123,7 @@ export abstract class BaseAgent implements Agent {
   async dispose(): Promise<void> {
     this.queue.abort();
     this.messenger.dispose();
-    this.provider.dispose();
+    await this.provider.dispose();
   }
 
   async deleteSession(): Promise<void> {

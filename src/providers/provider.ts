@@ -232,12 +232,12 @@ export abstract class BaseProvider {
   }
 
   async deleteSession(): Promise<void> {
-    this.dispose();
+    await this.dispose();
   }
 
   sendToTerminal(text: string): void {
     logger.log(`[${this.name}] Ignoring provider input: ${text.slice(0, 80)}`);
   }
 
-  dispose(): void {}
+  dispose(): void | Promise<void> {}
 }

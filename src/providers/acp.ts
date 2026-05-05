@@ -178,6 +178,84 @@ export function formatSpawnError(command: string, err: unknown): Error {
   return new Error(`Failed to start ACP CLI (${command}): ${error.message}`);
 }
 
+const liveAcpChildren = new Set<ChildProcessWithoutNullStreams>();
+let killAllHookInstalled = false;
+
+function installKillAllHook(): void {
+  if (killAllHookInstalled) return;
+  killAllHookInstalled = true;
+  const killAll = () => {
+    for (const child of liveAcpChildren) {
+      killProcessGroup(child, 'SIGKILL');
+    }
+    liveAcpChildren.clear();
+  };
+  process.on('exit', killAll);
+}
+
+function trackAcpChild(child: ChildProcessWithoutNullStreams): void {
+  installKillAllHook();
+  liveAcpChildren.add(child);
+}
+
+function untrackAcpChild(child: ChildProcessWithoutNullStreams): void {
+  liveAcpChildren.delete(child);
+}
+
+/** Force-kill every tracked ACP child and its pgroup. Used on hard shutdown. */
+export function killAllAcpChildren(): void {
+  for (const child of liveAcpChildren) {
+    killProcessGroup(child, 'SIGKILL');
+  }
+  liveAcpChildren.clear();
+}
+
+/**
+ * Send a signal to the child's whole process group when possible (so MCP
+ * servers / grandchildren spawned by the ACP CLI are also killed). Falls back
+ * to a direct child kill when the pgroup is unknown.
+ */
+function killProcessGroup(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
+  if (!child.pid || child.exitCode !== null || child.killed) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    try { child.kill(signal); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Terminate an ACP child cleanly: close stdin, send SIGTERM to the process
+ * group, then SIGKILL after a grace period if it is still alive. Resolves
+ * when the child has exited (or after the kill timeout).
+ */
+async function terminateAcpChild(
+  child: ChildProcessWithoutNullStreams,
+  graceMs = 3000,
+): Promise<void> {
+  if (child.exitCode !== null) {
+    untrackAcpChild(child);
+    return;
+  }
+  try { child.stdin.end(); } catch { /* ignore */ }
+  killProcessGroup(child, 'SIGTERM');
+
+  await new Promise<void>(resolve => {
+    const timer = setTimeout(() => {
+      killProcessGroup(child, 'SIGKILL');
+    }, graceMs);
+    timer.unref?.();
+    const finalTimer = setTimeout(() => resolve(), graceMs + 2000);
+    finalTimer.unref?.();
+    child.once('exit', () => {
+      clearTimeout(timer);
+      clearTimeout(finalTimer);
+      resolve();
+    });
+  });
+  untrackAcpChild(child);
+}
+
 export async function spawnAcpConnection<TClient extends acp.Client>(
   client: TClient,
   config: AcpSpawnConfig,
@@ -190,7 +268,11 @@ export async function spawnAcpConnection<TClient extends acp.Client>(
     cwd: config.cwd,
     env: config.env,
     stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true,
   });
+
+  trackAcpChild(child);
+  child.once('exit', () => untrackAcpChild(child));
 
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', chunk => {
@@ -301,8 +383,8 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
     super.sendToTerminal(text);
   }
 
-  dispose(): void {
-    void this.shutdownConnection();
+  async dispose(): Promise<void> {
+    await this.shutdownConnection();
     super.dispose();
   }
 
@@ -597,8 +679,7 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
     this.child = undefined;
     this.connection = undefined;
     if (child) {
-      child.stdin.end();
-      child.kill();
+      await terminateAcpChild(child);
     }
   }
 
@@ -772,8 +853,7 @@ export async function listAcpModels(
     return [];
   } finally {
     if (child) {
-      child.stdin.end();
-      child.kill();
+      await terminateAcpChild(child);
     }
   }
 }
