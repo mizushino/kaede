@@ -283,12 +283,12 @@ Codex SDK には Claude / Copilot のような外部承認コールバックが�
 Gemini provider は **Gemini CLI を ACP server として起動**し、Discord 操作は同梱の MCP サーバー経由で実行します。
 
 - **方法 A: `gemini` でログイン済み**  
-  `gemini` を一度起動して Google アカウントでログインしておくと、その認証情報を再利用します。Google One AI Premium / Code Assist など、CLI 側で使える契約もそのまま活かせます。
+  `npx gemini` を一度起動して Google アカウントでログインしておくと、その認証情報を再利用します。Google One AI Premium / Code Assist など、CLI 側で使える契約もそのまま活かせます。
 - **方法 B: API キー**  
   `GEMINI_API_KEY` を `.env` に設定すると API キー認証で動かせます。
 
 ```sh
-gemini
+npx gemini   # 起動して画面の指示に従いログイン
 ```
 
 #### Gemini 関連の環境変数
