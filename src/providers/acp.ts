@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Readable, Writable } from 'stream';
 import * as acp from '@agentclientprotocol/sdk';
-import { BaseProvider } from './provider.js';
+import { BaseProvider, normalizeToolName } from './provider.js';
 import type { ContextUsageInfo, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
 import { loadPermissionConfig, type PermissionConfig, type PermissionKind } from '../core/permissions.js';
@@ -63,18 +63,11 @@ const KNOWN_TOOL_NAMES = [
   'web_fetch', 'web_search', 'glob', 'grep', 'view', 'edit', 'bash',
 ];
 
-function stripMcpPrefix(name: string): string {
-  if (name.startsWith('mcp__discord__')) return name.slice('mcp__discord__'.length);
-  if (name.startsWith('discord__')) return name.slice('discord__'.length);
-  if (name.startsWith('discord.') || name.startsWith('discord:')) return name.slice('discord.'.length);
-  return name;
-}
-
 function detectToolNameFromText(text: string): string | null {
   const tokens = text.match(/\b([a-z_][a-z0-9_]*)\b/gi);
   if (!tokens) return null;
   for (const token of tokens) {
-    const stripped = stripMcpPrefix(token);
+    const stripped = normalizeToolName(token);
     if (KNOWN_TOOL_NAMES.includes(stripped)) {
       return stripped === 'web_search' ? 'web_fetch' : stripped;
     }
@@ -116,7 +109,7 @@ function detectToolNameFromPayload(value: unknown, depth = 0): string | null {
     const record = value as Record<string, unknown>;
     const named = readStringProperty(record, 'toolName', 'tool', 'name', 'command');
     if (named) {
-      const stripped = stripMcpPrefix(named);
+      const stripped = normalizeToolName(named);
       const detected = detectToolNameFromText(stripped);
       if (detected) return detected;
       return stripped;

@@ -4,6 +4,52 @@ import { STATUS_ICON } from '../core/status.js';
 
 const STATUS_MAX_LENGTH = 88;
 
+const DISCORD_TOOL_PREFIXES = [
+  'mcp__discord__',
+  'discord__',
+  'discord.',
+  'discord:',
+];
+
+/**
+ * Strip Discord MCP prefixes and map SDK-style tool names (Bash, Read, ...)
+ * to the canonical kaede names used in status icons / logs. Shared by all
+ * providers so tool labels stay consistent across Claude / Codex / ACP.
+ */
+export function normalizeToolName(toolName: string): string {
+  let name = toolName;
+  for (const prefix of DISCORD_TOOL_PREFIXES) {
+    if (name.startsWith(prefix)) {
+      name = name.slice(prefix.length);
+      break;
+    }
+  }
+
+  switch (name) {
+    case 'Bash':
+      return 'bash';
+    case 'Read':
+    case 'View':
+      return 'view';
+    case 'Edit':
+    case 'MultiEdit':
+    case 'Write':
+      return 'edit';
+    case 'Glob':
+      return 'glob';
+    case 'Grep':
+    case 'Search':
+      return 'grep';
+    case 'WebFetch':
+    case 'WebSearch':
+      return 'web_fetch';
+    case 'Task':
+      return 'report_intent';
+    default:
+      return name;
+  }
+}
+
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface ProviderOptions {
@@ -75,33 +121,7 @@ export abstract class BaseProvider {
   }
 
   protected normalizeToolName(toolName: string): string {
-    if (toolName.startsWith('mcp__discord__')) {
-      return toolName.slice('mcp__discord__'.length);
-    }
-
-    switch (toolName) {
-      case 'Bash':
-        return 'bash';
-      case 'Read':
-      case 'View':
-        return 'view';
-      case 'Edit':
-      case 'MultiEdit':
-      case 'Write':
-        return 'edit';
-      case 'Glob':
-        return 'glob';
-      case 'Grep':
-      case 'Search':
-        return 'grep';
-      case 'WebFetch':
-      case 'WebSearch':
-        return 'web_fetch';
-      case 'Task':
-        return 'report_intent';
-      default:
-        return toolName;
-    }
+    return normalizeToolName(toolName);
   }
 
   protected formatToolDetail(toolName: string, input: Record<string, unknown>): string {
