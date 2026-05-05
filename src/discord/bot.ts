@@ -17,6 +17,7 @@ import { PromptLoader } from '../core/prompts.js';
 import { logger } from '../core/logger.js';
 
 const ENV_SWITCH_IGNORED = new Set(['claude', 'copilot']);
+const ENV_SWITCH_IGNORE_PREFIXES = ['example', 'defaults'];
 
 export class DiscordBot extends Bot {
   readonly discord: Client;
@@ -206,7 +207,7 @@ export class DiscordBot extends Bot {
             const envName = f.replace(/^\.env\./, '');
             return { name: envName, value: envName };
           })
-          .filter(c => !ENV_SWITCH_IGNORED.has(c.value) && c.value.toLowerCase().includes(focused));
+          .filter(c => !ENV_SWITCH_IGNORED.has(c.value) && !ENV_SWITCH_IGNORE_PREFIXES.some(p => c.value.startsWith(p)) && c.value.toLowerCase().includes(focused));
         const defaultChoice = { name: 'default (.env)', value: 'default' };
         const choices = (defaultChoice.name.toLowerCase().includes(focused) ? [defaultChoice, ...envChoices] : envChoices).slice(0, 25);
         await interaction.respond(choices);
