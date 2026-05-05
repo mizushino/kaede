@@ -23,6 +23,17 @@ import { logger } from '../core/logger.js';
 const DEFAULT_TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
 const THREAD_STATE_DIRNAME = 'codex-threads';
 
+function parsePositiveIntegerEnv(name: string): number | undefined {
+  const raw = process.env[name]?.trim();
+  if (!raw) return undefined;
+
+  const value = Number(raw);
+  if (Number.isInteger(value) && value > 0) return value;
+
+  logger.log(`[codex] Ignoring invalid ${name}=${raw}; expected a positive integer.`);
+  return undefined;
+}
+
 function getThreadStateFilePath(sessionKey: string): string {
   const safe = encodeURIComponent(sessionKey);
   return path.join(DEFAULT_TEMPORARY_DIR, THREAD_STATE_DIRNAME, `${safe}.json`);
@@ -287,7 +298,17 @@ export class CodexCodeProvider extends BaseProvider {
       }
     }
 
+    this.applyCodexContextConfig(config);
+
     return config;
+  }
+
+  private applyCodexContextConfig(config: NonNullable<CodexOptions['config']>): void {
+    const autoCompactTokenLimit = parsePositiveIntegerEnv('CODEX_AUTO_COMPACT_TOKEN_LIMIT');
+
+    if (autoCompactTokenLimit) {
+      config.model_auto_compact_token_limit = autoCompactTokenLimit;
+    }
   }
 
   private buildThreadOptions(options: ProviderOptions | undefined): ThreadOptions {

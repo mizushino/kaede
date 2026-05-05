@@ -260,6 +260,7 @@ OpenAI Codex CLI を `npx codex login` で認証済みであれば、Codex SDK �
 | `CODEX_APPROVAL_POLICY` | 承認ポリシー（`never` / `on-failure`、既定: `never`） |
 | `CODEX_NETWORK_DISABLED` | 設定するとサンドボックス内のネットワークを無効化 |
 | `CODEX_WEB_SEARCH_DISABLED` | 設定すると組み込みウェブ検索を無効化 |
+| `CODEX_AUTO_COMPACT_TOKEN_LIMIT` | Codex の自動コンパクト閾値をトークン数で直接指定（例: `140000`） |
 | `CODEX_CONFIG_JSON` | 追加の `--config` を JSON で注入（トップレベルの TOML キーへ展開） |
 
 #### ⚠️ 承認モデルの注意
