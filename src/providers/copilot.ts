@@ -7,6 +7,7 @@ import { FunctionLoader } from '../core/functions.js';
 import { createTools, type ToolContext } from '../core/tools.js';
 import { createPermissionHandler, type PermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
+import { areFunctionManagementToolsEnabled, areScheduleManagementToolsEnabled } from '../core/tool_features.js';
 import { BaseProvider } from './provider.js';
 import type { ContextUsageInfo, ProviderContext, ProviderOptions, ReasoningEffort as BaseReasoningEffort } from './provider.js';
 
@@ -235,13 +236,12 @@ Use the send_message tool to respond to users. Always respond in the same langua
 You may reply to a specific message by including the messageId parameter.
 The current channel ID is: ${channelId}
 ${this.context.botUserId ? `Your Discord user ID is: ${this.context.botUserId}` : ''}
-
-You have a self-modifiable function system (functions dir: ${this.context.functionLoader.functionsDir}).
-Tools: list_funcs, read_func, write_func, delete_func, run_func
-
-You can manage scheduled tasks (cron-based, timezone: Asia/Tokyo).
-Tools: add_schedule, list_schedules, remove_schedule
-When users ask to schedule something, convert their request to a cron expression and use add_schedule.
+${areFunctionManagementToolsEnabled()
+	? `\nYou have a self-modifiable function system (functions dir: ${this.context.functionLoader.functionsDir}).\nTools: list_funcs, read_func, write_func, delete_func, run_func`
+	: ''}
+${areScheduleManagementToolsEnabled()
+	? `\n\nYou can manage scheduled tasks (cron-based, timezone: Asia/Tokyo).\nTools: add_schedule, list_schedules, remove_schedule\nWhen users ask to schedule something, convert their request to a cron expression and use add_schedule.`
+	: ''}
 
 IMPORTANT RULES:
 - ALWAYS use the send_message tool to send responses. Never output text directly without calling send_message.

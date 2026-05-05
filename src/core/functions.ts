@@ -4,6 +4,7 @@ import { readdir, readFile, writeFile, unlink } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import path from 'path';
 import { logger } from './logger.js';
+import { areFunctionManagementToolsEnabled } from './tool_features.js';
 
 /** Plain tool definition exported by function files (no SDK dependency needed). */
 interface RawTool {
@@ -57,6 +58,9 @@ export class FunctionLoader {
 
   /** Create CRUD management tools for functions. */
   createTools(ctx: unknown) {
+    if (!areFunctionManagementToolsEnabled()) {
+      return [];
+    }
     return [
       defineTool('list_funcs', {
         description: 'List installed functions.',

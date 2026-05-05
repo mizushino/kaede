@@ -33,7 +33,7 @@ cd kaede
 npm install
 ```
 
-> **Note:** 各 Provider の SDK（`@github/copilot-sdk` / `@anthropic-ai/claude-agent-sdk` / `@openai/codex-sdk`）は `optionalDependencies` として定義されています。`npm install` でも全部インストールされますが、利用しない SDK のインストールに失敗しても起動には影響しません。利用中の Provider の SDK が見つからない場合のみ、起動時に分かりやすいエラーが表示されます。
+> **Note:** 各 Provider の SDK（`@github/copilot-sdk` / `@anthropic-ai/claude-agent-sdk` `@anthropic-ai/claude-code` / `@openai/codex-sdk`）は `optionalDependencies` として定義されています。`npm install` でも全部インストールされますが、利用しない SDK のインストールに失敗しても起動には影響しません。利用中の Provider の SDK が見つからない場合のみ、起動時にエラーが表示されます。
 >
 > 必要な SDK だけインストールしたい場合は、`npm install --omit=optional` の後に使う SDK だけ個別にインストールしてください。
 >
@@ -46,10 +46,19 @@ npm install
 
 ### 4. 環境変数の設定
 
-`.env.claude`または`.env.copilot` をコピーして `.env` を作成:
+#### Copilot を使用する場合
+```sh
+cp .env.copilot .env
+```
 
+#### Claude を使用する場合
 ```sh
 cp .env.claude .env
+```
+
+#### Codex を使用する場合
+```sh
+cp .env.codex .env
 ```
 
 ### 5. AI Provider の認証設定
@@ -116,6 +125,20 @@ AGENT=kaede npm start   # .env.kaede を読み込んで起動
 npm run copilot         # .env.copilot を使って GitHub Copilot SDK で起動
 npm run claude          # .env.claude を使って Claude Agent SDK で起動
 npm run codex           # .env.codex を使って Codex SDK で起動
+```
+
+#### AIツールを無効化する
+
+トークン消費を抑えたい場合は、AIツールを無効化できます。どちらも既定は有効です。
+
+| 環境変数 | 説明 |
+|----------|------|
+| `ENABLE_FUNCTION_MANAGEMENT_TOOLS` | `0` / `false` で `list_funcs` / `read_func` / `write_func` / `delete_func` / `run_func` を無効にします |
+| `ENABLE_SCHEDULE_MANAGEMENT_TOOLS` | `0` / `false` で `add_schedule` / `list_schedules` / `remove_schedule` を無効にします |
+
+```sh
+ENABLE_FUNCTION_MANAGEMENT_TOOLS=0
+ENABLE_SCHEDULE_MANAGEMENT_TOOLS=0
 ```
 
 ---

@@ -1,3 +1,5 @@
+import { filterEnabledTools } from './tool_features.js';
+
 type JsonSchema = {
   type: 'object';
   properties: Record<string, unknown>;
@@ -11,7 +13,7 @@ export type ToolContract = {
   inputSchema: JsonSchema;
 };
 
-export const DISCORD_TOOL_CONTRACTS: ToolContract[] = [
+const BASE_DISCORD_TOOL_CONTRACTS: ToolContract[] = [
   {
     name: 'ask_user',
     promptSignature: 'mcp__discord__ask_user(channelId, questions)',
@@ -184,10 +186,14 @@ export const DISCORD_TOOL_CONTRACTS: ToolContract[] = [
   },
 ];
 
+export function getDiscordToolContracts(): ToolContract[] {
+  return filterEnabledTools(BASE_DISCORD_TOOL_CONTRACTS);
+}
+
 export function getClaudeDiscordAllowedTools(): string[] {
-  return DISCORD_TOOL_CONTRACTS.map(tool => `mcp__discord__${tool.name}`);
+  return getDiscordToolContracts().map(tool => `mcp__discord__${tool.name}`);
 }
 
 export function getClaudeDiscordPromptSignatures(): string[] {
-  return DISCORD_TOOL_CONTRACTS.map(tool => `- ${tool.promptSignature}`);
+  return getDiscordToolContracts().map(tool => `- ${tool.promptSignature}`);
 }

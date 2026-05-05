@@ -6,6 +6,7 @@ import type { RequestCounter } from './counter.js';
 import type { Scheduler } from './scheduler.js';
 import { logger } from './logger.js';
 import { buildDeferredReplyMarker } from './queue_state.js';
+import { areScheduleManagementToolsEnabled } from './tool_features.js';
 
 const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
 const WAIT_TIMEOUT_MARGIN = 5_000;
@@ -36,7 +37,7 @@ function getEffectiveWaitTimeout(ctx: ToolContext): number {
 }
 
 export function createTools(ctx: ToolContext) {
-  return [
+  const tools: any[] = [
     defineTool('send_message', {
       description: 'Send a message to the channel (optionally as a reply). Messages over the limit will be split automatically.',
       parameters: z.object({
@@ -147,47 +148,50 @@ export function createTools(ctx: ToolContext) {
       },
     }),
 
-    // --- Schedule tools ---
-
-    defineTool('add_schedule', {
-      description: 'Register a scheduled task that sends a message to a channel on a cron schedule (timezone: Asia/Tokyo)',
-      parameters: z.object({
-        cron: z.string().describe('Cron expression (e.g. "0 9 * * *" for every day at 9:00 AM)'),
-        channelId: z.string().describe('Target channel ID to send the prompt to'),
-        prompt: z.string().describe('The message/prompt to send when the schedule fires'),
-        description: z.string().describe('Human-readable description of the schedule').optional(),
-        guildId: z.string().describe('Optional: Server/guild ID for server-scoped sessions').optional(),
-      }),
-      skipPermission: true,
-      handler: async ({ cron, channelId, prompt, description, guildId }) => {
-        try {
-          const entry = ctx.scheduler.add({ cron, channelId, prompt, description, guildId });
-          return { success: true, schedule: entry };
-        } catch (err: unknown) {
-          return { error: (err as Error).message };
-        }
-      },
-    }),
-
-    defineTool('list_schedules', {
-      description: 'List all registered scheduled tasks',
-      parameters: z.object({}),
-      skipPermission: true,
-      handler: async () => {
-        return { schedules: ctx.scheduler.list() };
-      },
-    }),
-
-    defineTool('remove_schedule', {
-      description: 'Remove a scheduled task by ID',
-      parameters: z.object({
-        id: z.string().describe('Schedule ID to remove'),
-      }),
-      skipPermission: true,
-      handler: async ({ id }) => {
-        const removed = ctx.scheduler.remove(id);
-        return removed ? { success: true } : { error: `Schedule "${id}" not found` };
-      },
-    }),
   ];
+
+  if (areScheduleManagementToolsEnabled()) {
+    tools.push(
+      defineTool('add_schedule', {
+        description: 'Register a scheduled task that sends a message to a channel on a cron schedule (timezone: Asia/Tokyo)',
+        parameters: z.object({
+          cron: z.string().describe('Cron expression (e.g. "0 9 * * *" for every day at 9:00 AM)'),
+          channelId: z.string().describe('Target channel ID to send the prompt to'),
+          prompt: z.string().describe('The message/prompt to send when the schedule fires'),
+          description: z.string().describe('Human-readable description of the schedule').optional(),
+          guildId: z.string().describe('Optional: Server/guild ID for server-scoped sessions').optional(),
+        }),
+        skipPermission: true,
+        handler: async ({ cron, channelId, prompt, description, guildId }) => {
+          try {
+            const entry = ctx.scheduler.add({ cron, channelId, prompt, description, guildId });
+            return { success: true, schedule: entry };
+          } catch (err: unknown) {
+            return { error: (err as Error).message };
+          }
+        },
+      }),
+      defineTool('list_schedules', {
+        description: 'List all registered scheduled tasks',
+        parameters: z.object({}),
+        skipPermission: true,
+        handler: async () => {
+          return { schedules: ctx.scheduler.list() };
+        },
+      }),
+      defineTool('remove_schedule', {
+        description: 'Remove a scheduled task by ID',
+        parameters: z.object({
+          id: z.string().describe('Schedule ID to remove'),
+        }),
+        skipPermission: true,
+        handler: async ({ id }) => {
+          const removed = ctx.scheduler.remove(id);
+          return removed ? { success: true } : { error: `Schedule "${id}" not found` };
+        },
+      }),
+    );
+  }
+
+  return tools;
 }

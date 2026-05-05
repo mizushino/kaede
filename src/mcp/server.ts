@@ -7,7 +7,8 @@ import { Client, GatewayIntentBits, TextChannel, ThreadChannel, AttachmentBuilde
 import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
-import { DISCORD_TOOL_CONTRACTS } from '../core/tool_contract.js';
+import { getDiscordToolContracts } from '../core/tool_contract.js';
+import { isDiscordToolEnabled } from '../core/tool_features.js';
 import { enqueueDeferredReply, readPendingQueueSnapshot } from '../core/queue_state.js';
 import { logger } from '../core/logger.js';
 
@@ -147,7 +148,7 @@ class KaedeMcpServer {
 
   private setupHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: DISCORD_TOOL_CONTRACTS.map(tool => ({
+      tools: getDiscordToolContracts().map(tool => ({
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
@@ -158,6 +159,9 @@ class KaedeMcpServer {
       await this.readyPromise;
 
       try {
+        if (!isDiscordToolEnabled(request.params.name)) {
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
+        }
         switch (request.params.name) {
           case 'send_message':
             return await this.sendMessage(request.params.arguments);
