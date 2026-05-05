@@ -118,21 +118,9 @@ function readStringProperty(source: Record<string, unknown>, ...keys: string[]):
 }
 
 const DEFAULT_GEMINI_CONTEXT_WINDOW = 1_048_576;
-const GEMINI_CONTEXT_WINDOW: Record<string, number> = {
-  'gemini-2.5-pro': 2_097_152,
-  'gemini-3-pro-preview': 1_048_576,
-  'gemini-3-flash-preview': 1_048_576,
-  'gemini-3.1-flash-lite-preview': 1_048_576,
-  'gemini-2.5-flash': 1_048_576,
-  'gemini-2.5-flash-lite': 1_048_576,
-};
 
-function getGeminiContextWindow(modelId: string): number {
-  if (!modelId) return DEFAULT_GEMINI_CONTEXT_WINDOW;
-  if (GEMINI_CONTEXT_WINDOW[modelId]) return GEMINI_CONTEXT_WINDOW[modelId];
-  for (const [key, value] of Object.entries(GEMINI_CONTEXT_WINDOW)) {
-    if (modelId.startsWith(key)) return value;
-  }
+function getGeminiContextWindow(_modelId: string): number {
+  // TODO: Populate GEMINI_CONTEXT_WINDOW with known model context windows when available.
   return DEFAULT_GEMINI_CONTEXT_WINDOW;
 }
 
