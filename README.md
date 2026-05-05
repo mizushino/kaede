@@ -399,7 +399,7 @@ Discord のスラッシュコマンドとして利用できます。
 
 ### カスタムプロンプトコマンド
 
-デフォルトでは `{WORKSPACE_DIR}/.github/prompts/` と `{WORKSPACE_DIR}/prompts/` の両方を見に行き、`.prompt.md` ファイルをファイル名でスラッシュコマンドとして自動登録します。`PROMPTS_DIR` を指定した場合はそのディレクトリだけを使います。
+デフォルトでは`{WORKSPACE_DIR}/prompts/`（及び `{WORKSPACE_DIR}/.github/prompts/`）内に存在する`.prompt.md` ファイルをファイル名でスラッシュコマンドとして自動登録します。`PROMPTS_DIR` を指定した場合はそのディレクトリだけを使います。
 
 **プロンプトファイルの形式:**
 
