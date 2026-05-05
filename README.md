@@ -96,22 +96,22 @@ npm start
 
 ## 🤖 AI Provider
 
-Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK** の 3 つの AI Provider に対応しています。`AI_PROVIDER` 環境変数で切り替えます。
+Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK** の 3 つの AI Provider に対応しています。`AGENT_PROVIDER` 環境変数で切り替えます。
 
-| `AI_PROVIDER` | 実行方式 | 主なモデル環境変数 |
-|---------------|----------|--------------------|
-| `copilot`（デフォルト） | GitHub Copilot SDK | `COPILOT_MODEL` |
-| `claude` | Claude Agent SDK (`claude`) | `CLAUDE_MODEL` |
-| `codex` | OpenAI Codex SDK (`codex`) | `CODEX_MODEL` |
+| `AGENT_PROVIDER` | 実行方式 | 主なモデル環境変数 |
+|------------------|----------|--------------------|
+| `copilot`（デフォルト） | GitHub Copilot SDK | `AGENT_MODEL` |
+| `claude` | Claude Agent SDK (`claude`) | `AGENT_MODEL` |
+| `codex` | OpenAI Codex SDK (`codex`) | `AGENT_MODEL` |
 
 ### 切り替え方法
 
 ```sh
 # .env で指定
-AI_PROVIDER=claude
+AGENT_PROVIDER=claude
 
 # または環境変数で直接
-AI_PROVIDER=claude CLAUDE_MODEL=sonnet npm start
+AGENT_PROVIDER=claude AGENT_MODEL=sonnet npm start
 ```
 
 #### マルチエージェント（`.env.<name>` の読み込み）
@@ -138,7 +138,7 @@ ENABLE_SCHEDULE_MANAGEMENT_TOOLS=0
 
 ---
 
-### 🐙 GitHub Copilot（`AI_PROVIDER=copilot`）
+### 🐙 GitHub Copilot（`AGENT_PROVIDER=copilot`）
 
 #### 認証
 
@@ -168,7 +168,7 @@ GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, 
 | 環境変数 | 必須 | 説明 |
 |----------|------|------|
 | `COPILOT_PROVIDER_BASE_URL` | ✅ | モデルプロバイダーの API エンドポイント |
-| `COPILOT_MODEL` | ✅ | 使用するモデル識別子 |
+| `AGENT_MODEL` | ✅ | 使用するモデル識別子 |
 | `COPILOT_PROVIDER_TYPE` | - | プロバイダーの種類: `openai`（デフォルト）, `azure`, `anthropic` |
 | `COPILOT_PROVIDER_API_KEY` | - | プロバイダーの API キー（Ollama などローカルプロバイダーには不要） |
 | `COPILOT_MAX_CONTEXT_WINDOW_TOKENS` | - | オープンモデルなどでコンテキスト長を明示したい場合の上書き値 |
@@ -181,20 +181,20 @@ GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, 
 COPILOT_PROVIDER_BASE_URL=https://api.openai.com/v1
 COPILOT_PROVIDER_TYPE=openai
 COPILOT_PROVIDER_API_KEY=sk-...
-COPILOT_MODEL=gpt-4o
+AGENT_MODEL=gpt-4o
 ```
 
 **設定例（ローカル Ollama）:**
 
 ```sh
 COPILOT_PROVIDER_BASE_URL=http://localhost:11434/v1
-COPILOT_MODEL=llama3
+AGENT_MODEL=llama3
 ```
 
 **エージェントごとにコンテキスト長を明示したい場合（例: `.env.yotsuba`）:**
 
 ```sh
-COPILOT_MODEL=Qwen3.6-27B
+AGENT_MODEL=Qwen3.6-27B
 COPILOT_MAX_CONTEXT_WINDOW_TOKENS=262144
 ```
 
@@ -204,7 +204,7 @@ COPILOT_MAX_CONTEXT_WINDOW_TOKENS=262144
 
 ---
 
-### 🟣 Claude Agent（`AI_PROVIDER=claude`）
+### 🟣 Claude Agent（`AGENT_PROVIDER=claude`）
 
 #### 認証
 
@@ -230,17 +230,17 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 | 環境変数 | 説明 |
 |----------|------|
-| `CLAUDE_MODEL` | 使用するモデル（例: `sonnet`, `opus`） |
+| `AGENT_MODEL` | 使用するモデル（例: `sonnet`, `opus`） |
 | `CLAUDE_COMMAND` | Claude Code 実行ファイルのパスまたはコマンド（既定: SDK 同梱の glibc/musl native binary を自動選択） |
 | `CLAUDE_ARGS` | Claude Agent SDK から Claude Code に追加する引数 |
 | `CLAUDE_PERMISSION_MODE` | Claude Agent SDK の permission mode（既定: `bypassPermissions`） |
 | `CLAUDE_ALLOWED_TOOLS` | Claude Agent SDK に渡す auto-allow ツール一覧（カンマ区切り） |
 | `CLAUDE_DISALLOWED_TOOLS` | Claude Agent SDK で禁止するツール一覧（カンマ区切り、既定で `AskUserQuestion` を含む） |
-| `REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
+| `AGENT_REASONING_EFFORT` | Claude の思考レベル（`low` / `medium` / `high` / `xhigh`）。SDK の `effort` オプションへ渡されます |
 
 ---
 
-### 🟢 Codex Agent（`AI_PROVIDER=codex`）
+### 🟢 Codex Agent（`AGENT_PROVIDER=codex`）
 
 #### 認証
 
@@ -250,7 +250,7 @@ OpenAI Codex CLI を `npx codex login` で認証済みであれば、Codex SDK �
 
 | 環境変数 | 説明 |
 |----------|------|
-| `CODEX_MODEL` | 使用するモデル（例: `gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.3-codex`） |
+| `AGENT_MODEL` | 使用するモデル（例: `gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.3-codex`） |
 | `CODEX_MODELS` | `/models` の一覧表示で使う候補をカンマ区切りで上書き（既定: `gpt-5.5,gpt-5.4,gpt-5.4-mini,gpt-5.3-codex,gpt-5.3-codex-spark,gpt-5.2`） |
 | `CODEX_API_KEY` | Codex 用 API キー（`npx codex login` 済みなら不要） |
 | `CODEX_BASE_URL` | カスタム OpenAI 互換エンドポイント |
@@ -260,7 +260,7 @@ OpenAI Codex CLI を `npx codex login` で認証済みであれば、Codex SDK �
 | `CODEX_NETWORK_DISABLED` | 設定するとサンドボックス内のネットワークを無効化 |
 | `CODEX_WEB_SEARCH_DISABLED` | 設定すると組み込みウェブ検索を無効化 |
 | `CODEX_CONFIG_JSON` | 追加の `--config` を JSON で注入（トップレベルの TOML キーへ展開） |
-| `REASONING_EFFORT` | Codex の思考レベル（`minimal` / `low` / `medium` / `high` / `xhigh`） |
+| `AGENT_REASONING_EFFORT` | Codex の思考レベル（`minimal` / `low` / `medium` / `high` / `xhigh`） |
 
 #### ⚠️ 承認モデルの注意
 

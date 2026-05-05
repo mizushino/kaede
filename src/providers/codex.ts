@@ -296,7 +296,7 @@ export class CodexCodeProvider extends BaseProvider {
     additionalDirectories.add(workspaceDir);
     additionalDirectories.add(path.resolve(process.cwd()));
 
-    const model = (options?.model || process.env.CODEX_MODEL || '').trim();
+    const model = (options?.model || process.env.AGENT_MODEL || '').trim();
     const effort = this.resolveEffort(options);
     const sandboxMode = this.resolveSandboxMode();
     const approvalPolicy = this.resolveApprovalPolicy();
@@ -315,7 +315,7 @@ export class CodexCodeProvider extends BaseProvider {
   }
 
   private resolveEffort(options: ProviderOptions | undefined): ModelReasoningEffort | undefined {
-    const raw = (options?.reasoningEffort || process.env.REASONING_EFFORT || '').trim().toLowerCase();
+    const raw = (options?.reasoningEffort || process.env.AGENT_REASONING_EFFORT || '').trim().toLowerCase();
     if (raw === 'minimal' || raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'xhigh') return raw;
     return undefined;
   }

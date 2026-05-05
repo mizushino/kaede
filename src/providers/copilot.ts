@@ -16,7 +16,7 @@ export type CopilotSendErrorAction = 'retry' | 'stop' | 'connection' | 'fail';
 
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
 const USER_RESPONSE_TIMEOUT = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
-export const DEFAULT_REASONING_EFFORT = (process.env.REASONING_EFFORT || '') as ReasoningEffort | '';
+export const DEFAULT_REASONING_EFFORT = (process.env.AGENT_REASONING_EFFORT || '') as ReasoningEffort | '';
 
 export interface CopilotProviderContext extends ProviderContext {
 	clientManager: CopilotClientManager;

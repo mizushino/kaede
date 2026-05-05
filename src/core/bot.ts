@@ -12,11 +12,6 @@ export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex'] as const;
 export type AgentProviderType = typeof AGENT_PROVIDER_TYPES[number];
 
 const DEFAULT_PROVIDER: AgentProviderType = 'copilot';
-const PROVIDER_MODEL_ENV: Record<AgentProviderType, string> = {
-  copilot: 'COPILOT_MODEL',
-  claude: 'CLAUDE_MODEL',
-  codex: 'CODEX_MODEL',
-};
 const PROVIDER_SDK_PACKAGE: Record<AgentProviderType, string> = {
   copilot: '@github/copilot-sdk',
   claude: '@anthropic-ai/claude-agent-sdk',
@@ -53,7 +48,7 @@ export abstract class Bot {
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
     this.functionsDir = process.env.FUNCTIONS_DIR || path.join(this.workspaceDir, 'functions');
     this.agentName = process.env.AGENT_NAME || 'agent';
-    this.providerType = this.normalizeProvider(process.env.AI_PROVIDER || process.env.AGENT_PROVIDER);
+    this.providerType = this.normalizeProvider(process.env.AGENT_PROVIDER);
     this.model = this.resolveInitialModel(this.providerType);
     this.sessionScope = (process.env.SESSION_SCOPE as SessionScope) || 'channel';
     this.counter = new RequestCounter(this.temporaryDir);
@@ -190,13 +185,12 @@ export abstract class Bot {
       return normalizedValue as AgentProviderType;
     }
 
-    logger.log(`[BOT] Unknown provider "${value}" from AI_PROVIDER/AGENT_PROVIDER, falling back to ${DEFAULT_PROVIDER}`);
+    logger.log(`[BOT] Unknown provider "${value}" from AGENT_PROVIDER, falling back to ${DEFAULT_PROVIDER}`);
     return DEFAULT_PROVIDER;
   }
 
-  private resolveInitialModel(provider: AgentProviderType): string {
-    const envName = PROVIDER_MODEL_ENV[provider];
-    return process.env[envName]?.trim() || '';
+  private resolveInitialModel(_provider: AgentProviderType): string {
+    return process.env.AGENT_MODEL?.trim() || '';
   }
 
   private createAgent(messenger: Messenger, sessionKey: string): Agent {

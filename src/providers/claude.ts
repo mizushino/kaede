@@ -814,7 +814,7 @@ export class ClaudeCodeProvider extends BaseProvider {
   }
 
   private resolveEffort(options: ProviderOptions | undefined): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
-    const raw = (options?.reasoningEffort || process.env.REASONING_EFFORT || '').trim().toLowerCase();
+    const raw = (options?.reasoningEffort || process.env.AGENT_REASONING_EFFORT || '').trim().toLowerCase();
     if (raw === 'low' || raw === 'medium' || raw === 'high' || raw === 'xhigh') return raw;
     return undefined;
   }
