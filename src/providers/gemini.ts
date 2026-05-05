@@ -117,6 +117,25 @@ function readStringProperty(source: Record<string, unknown>, ...keys: string[]):
   return null;
 }
 
+const DEFAULT_GEMINI_CONTEXT_WINDOW = 1_048_576;
+const GEMINI_CONTEXT_WINDOW: Record<string, number> = {
+  'gemini-2.5-pro': 2_097_152,
+  'gemini-3-pro-preview': 1_048_576,
+  'gemini-3-flash-preview': 1_048_576,
+  'gemini-3.1-flash-lite-preview': 1_048_576,
+  'gemini-2.5-flash': 1_048_576,
+  'gemini-2.5-flash-lite': 1_048_576,
+};
+
+function getGeminiContextWindow(modelId: string): number {
+  if (!modelId) return DEFAULT_GEMINI_CONTEXT_WINDOW;
+  if (GEMINI_CONTEXT_WINDOW[modelId]) return GEMINI_CONTEXT_WINDOW[modelId];
+  for (const [key, value] of Object.entries(GEMINI_CONTEXT_WINDOW)) {
+    if (modelId.startsWith(key)) return value;
+  }
+  return DEFAULT_GEMINI_CONTEXT_WINDOW;
+}
+
 function stripMcpPrefix(name: string): string {
   if (name.startsWith('mcp__discord__')) return name.slice('mcp__discord__'.length);
   if (name.startsWith('discord__')) return name.slice('discord__'.length);
@@ -400,6 +419,8 @@ export class GeminiCodeProvider extends BaseProvider implements acp.Client {
       if (response.stopReason === 'cancelled') {
         throw new Error('gemini prompt cancelled');
       }
+
+      this.updateUsageFromPromptResponse(response);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const lower = message.toLowerCase();
@@ -626,6 +647,39 @@ export class GeminiCodeProvider extends BaseProvider implements acp.Client {
       this.currentModelId = targetModel;
       await this.persistSessionState();
     }
+  }
+
+  private updateUsageFromPromptResponse(response: acp.PromptResponse): void {
+    const meta = (response as { _meta?: Record<string, unknown> })._meta;
+    const quota = meta && typeof meta === 'object' ? (meta as Record<string, unknown>).quota : undefined;
+    const tokenCount = quota && typeof quota === 'object'
+      ? (quota as Record<string, unknown>).token_count as Record<string, unknown> | undefined
+      : undefined;
+    const inputTokens = tokenCount && typeof tokenCount.input_tokens === 'number'
+      ? tokenCount.input_tokens
+      : undefined;
+
+    const used = response.usage?.totalTokens ?? inputTokens;
+    if (typeof used !== 'number') return;
+
+    const modelId = this.currentModelId || (() => {
+      const modelUsage = quota && typeof quota === 'object'
+        ? (quota as Record<string, unknown>).model_usage
+        : undefined;
+      if (Array.isArray(modelUsage) && modelUsage[0] && typeof (modelUsage[0] as Record<string, unknown>).model === 'string') {
+        return (modelUsage[0] as { model: string }).model;
+      }
+      return '';
+    })();
+
+    const max = getGeminiContextWindow(modelId);
+    this.currentUsage = {
+      totalTokens: used,
+      maxTokens: max,
+      percentage: max > 0 ? Math.round((used / max) * 1000) / 10 : 0,
+      model: modelId || undefined,
+      categories: [],
+    };
   }
 
   private async shutdownConnection(): Promise<void> {
