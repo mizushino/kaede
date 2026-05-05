@@ -450,7 +450,7 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 
 自然言語で「毎朝9時にニュースをまとめて」と伝えると、AI がcron式に変換してスケジュール登録します。スケジュールは `workspace/schedules.json` に永続化され、再起動後も自動復元されます。
 
-### 関数（Function）管理ツール
+### 関数管理ツール
 
 | ツール | 説明 |
 |--------|------|
@@ -464,7 +464,7 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 
 各 SDK が提供する組み込みツール（`bash`, `view` / `Read`, `create` / `Write`, `edit`, `glob`, `grep`, `web_fetch` / `WebFetch` 等）も自動的に利用可能です。Claude provider では Discord 操作は同梱の MCP サーバー（`mcp__discord__*`）経由で行われます。
 
-## 🧩 関数（Function）システム
+## 🧩 関数システム
 
 AI が自らツールを作成・管理できるホットリロード対応の関数システムです。関数ファイルは `WORKSPACE_DIR/functions/` に配置され、セッション開始時に動的にインポートされます。
 
