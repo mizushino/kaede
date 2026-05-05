@@ -40,7 +40,7 @@ npm install
 > ```sh
 > npm install --omit=optional
 > npm install @github/copilot-sdk        # Copilot を使う場合
-> # npm install @anthropic-ai/claude-agent-sdk  # Claude を使う場合
+> # npm install @anthropic-ai/claude-agent-sdk @anthropic-ai/claude-code  # Claude を使う場合
 > # npm install @openai/codex-sdk        # Codex を使う場合
 > ```
 
