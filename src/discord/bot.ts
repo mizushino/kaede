@@ -15,6 +15,7 @@ import { Messenger } from '../core/messenger.js';
 import { DiscordMessenger } from './messenger.js';
 import { PromptLoader } from '../core/prompts.js';
 import { logger } from '../core/logger.js';
+import { areFunctionManagementToolsEnabled, areScheduleManagementToolsEnabled } from '../core/tool_features.js';
 
 const ENV_SWITCH_IGNORED = new Set(['claude', 'copilot']);
 
@@ -101,7 +102,7 @@ export class DiscordBot extends Bot {
                   { name: 'high', value: 'high' },
                   { name: 'xhigh', value: 'xhigh' },
                 ))),
-      new SlashCommandBuilder()
+      ...(areScheduleManagementToolsEnabled() ? [new SlashCommandBuilder()
         .setName('schedule')
         .setDescription('Manage scheduled tasks')
         .addSubcommand(sub =>
@@ -121,8 +122,8 @@ export class DiscordBot extends Bot {
           sub.setName('remove')
             .setDescription('Remove a scheduled task')
             .addStringOption(opt =>
-              opt.setName('id').setDescription('Schedule ID').setRequired(true).setAutocomplete(true))),
-      new SlashCommandBuilder()
+              opt.setName('id').setDescription('Schedule ID').setRequired(true).setAutocomplete(true)))] : []),
+      ...(areFunctionManagementToolsEnabled() ? [new SlashCommandBuilder()
         .setName('function')
         .setDescription('Manage custom functions')
         .addSubcommand(sub =>
@@ -136,7 +137,7 @@ export class DiscordBot extends Bot {
           sub.setName('delete')
             .setDescription('Delete a function')
             .addStringOption(opt =>
-              opt.setName('name').setDescription('Function filename (e.g. weather.ts)').setRequired(true).setAutocomplete(true))),
+              opt.setName('name').setDescription('Function filename (e.g. weather.ts)').setRequired(true).setAutocomplete(true)))] : []),
     ];
 
     // Add prompt file commands
