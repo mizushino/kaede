@@ -149,10 +149,6 @@ export class CodexCodeProvider extends BaseProvider {
     if (turnFailed) {
       throw new Error(turnFailed);
     }
-
-    if (!state.sentDiscordMessage) {
-      logger.log(`[${this.name}] Turn completed without discord send_message tool usage`);
-    }
   }
 
   private handleEvent(event: ThreadEvent, state: QueryState): string | null {

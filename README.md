@@ -1,13 +1,13 @@
 # 🍁 Kaede
 
-GitHub Copilot SDK / Claude Agent SDK / Codex SDK を利用した Discord AI エージェント。チャンネルやフォーラムスレッドで AI アシスタントと対話できます。
+GitHub Copilot SDK / Claude Agent SDK / Codex SDK / Gemini CLI (ACP) を利用した Discord AI エージェント。チャンネルやフォーラムスレッドで AI アシスタントと対話できます。
 
 ## ✨ 特徴
 
 - 🎯 **Discord 徹底連携**: 画像認識、ステータス表示、リアクション承認、カスタムプロンプトコマンドなど、Discord の機能をフル活用した対話が可能です。
 - 🧩 **自律的な拡張性**: ボット自身が自らツールを作成・実装する「関数システム」を搭載し、必要な機能を会話から追加できます。
 - 📅 **スケジュール機能**: cron ベースのスケジューラを内蔵し、定期的なニュース巡回や定型タスクを自動で走らせられます。
-- 🔁 **マルチ SDK 対応**: Copilot SDK / Claude Agent SDK / Codex SDK をサポートし、用途に応じた最適なエージェントを選択できます。
+- 🔁 **マルチ SDK 対応**: Copilot SDK / Claude Agent SDK / Codex SDK / Gemini CLI (ACP) をサポートし、用途に応じた最適なエージェントを選択できます。
 - 🔀 **動的モデル切り替え**: `/model` コマンドで、対話中でも利用するモデルをワンタッチで切り替えられます。
 - 🔐 **柔軟な権限管理**: 操作種別ごとの自動承認や、Discord リアクションによる対話的な承認をきめ細かく制御できます。
 - 🌐 **マルチスコープ対応**: チャンネル単位／サーバー単位でセッションを使い分け、目的に応じた会話空間を構築できます。
@@ -33,7 +33,7 @@ cd kaede
 npm install
 ```
 
-> **Note:** 各 Provider の SDK（`@github/copilot-sdk` / `@anthropic-ai/claude-agent-sdk` `@anthropic-ai/claude-code` / `@openai/codex-sdk`）は `optionalDependencies` として定義されています。`npm install` でも全部インストールされますが、利用しない SDK のインストールに失敗しても起動には影響しません。利用中の Provider の SDK が見つからない場合のみ、起動時にエラーが表示されます。
+> **Note:** 各 Provider の SDK / CLI（`@github/copilot-sdk` / `@anthropic-ai/claude-agent-sdk` `@anthropic-ai/claude-code` / `@openai/codex-sdk` / `@agentclientprotocol/sdk` / `@google/gemini-cli`）は `optionalDependencies` として定義されています。`npm install` でも全部インストールされますが、利用しない Provider のインストールに失敗しても起動には影響しません。利用中の Provider に必要な依存が見つからない場合のみ、起動時にエラーが表示されます。
 >
 > 必要な SDK だけインストールしたい場合は、`npm install --omit=optional` の後に使う SDK だけ個別にインストールしてください。
 >
@@ -42,6 +42,7 @@ npm install
 > npm install @github/copilot-sdk        # Copilot を使う場合
 > # npm install @anthropic-ai/claude-agent-sdk @anthropic-ai/claude-code  # Claude を使う場合
 > # npm install @openai/codex-sdk        # Codex を使う場合
+> # npm install @agentclientprotocol/sdk @google/gemini-cli  # Gemini を使う場合
 > ```
 
 ### 4. 環境変数の設定
@@ -59,6 +60,11 @@ cp .env.example.claude .env
 #### Codex を使用する場合
 ```sh
 cp .env.example.codex .env
+```
+
+#### Gemini を使用する場合
+```sh
+cp .env.example.gemini .env
 ```
 
 ### 5. AI Provider の認証設定
@@ -96,13 +102,14 @@ npm start
 
 ## 🤖 AI Provider
 
-Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK** の 3 つの AI Provider に対応しています。`AGENT_PROVIDER` 環境変数で切り替えます。
+Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemini CLI (ACP)** の 4 つの AI Provider に対応しています。`AGENT_PROVIDER` 環境変数で切り替えます。
 
 | `AGENT_PROVIDER` | 実行方式 | 主なモデル環境変数 |
 |------------------|----------|--------------------|
 | `copilot`（デフォルト） | GitHub Copilot SDK | `AGENT_MODEL` |
 | `claude` | Claude Agent SDK (`claude`) | `AGENT_MODEL` |
 | `codex` | OpenAI Codex SDK (`codex`) | `AGENT_MODEL` |
+| `gemini` | Gemini CLI (`gemini --acp`) | `AGENT_MODEL` |
 
 ### 切り替え方法
 
@@ -267,6 +274,37 @@ OpenAI Codex CLI を `npx codex login` で認証済みであれば、Codex SDK �
 
 Codex SDK には Claude / Copilot のような外部承認コールバックが用意されていません。そのため `CODEX_APPROVAL_POLICY=on-request` や `untrusted` を設定すると、codex CLI が stdin で承認待ちになりボットが応答を返せなくなります。これを避けるため、本実装では `on-request` / `untrusted` が指定されても自動的に `never` にフォールバックし、警告ログを出します。承認制御が必要な場合は `CODEX_SANDBOX_MODE` を `read-only` にする等で代替してください。
 
+---
+
+### 🔷 Gemini CLI（`AGENT_PROVIDER=gemini`）
+
+#### 認証
+
+Gemini provider は **Gemini CLI を ACP server として起動**し、Discord 操作は同梱の MCP サーバー経由で実行します。
+
+- **方法 A: `gemini` でログイン済み**  
+  `gemini` を一度起動して Google アカウントでログインしておくと、その認証情報を再利用します。Google One AI Premium / Code Assist など、CLI 側で使える契約もそのまま活かせます。
+- **方法 B: API キー**  
+  `GEMINI_API_KEY` を `.env` に設定すると API キー認証で動かせます。
+
+```sh
+gemini
+```
+
+#### Gemini 関連の環境変数
+
+| 環境変数 | 説明 |
+|----------|------|
+| `AGENT_MODEL` | 使用するモデル（空なら Gemini CLI の既定） |
+| `GEMINI_COMMAND` | `gemini` 実行ファイルのパスまたはコマンド（既定: `node_modules/.bin/gemini` → `PATH` 上の `gemini`） |
+| `GEMINI_ARGS` | Gemini CLI に追加する引数（`--acp` は自動付与） |
+| `GEMINI_APPROVAL_MODE` | ACP の session mode（`default` / `auto-edit` / `yolo` / `plan`、既定: `default`） |
+| `GEMINI_CLI_TRUST_WORKSPACE` | headless 実行時の trust ダイアログをスキップ（既定: `true`） |
+| `GEMINI_API_KEY` | API キー認証を使う場合の Gemini API キー |
+| `GEMINI_CLI_HOME` | Gemini CLI の設定 / ログイン情報の保存先を切り替える場合に指定 |
+
+> **Note:** Gemini provider は ACP の file-system proxy を使うため、`WORKSPACE_DIR` に加えてリポジトリルートと `TEMPORARY_DIR` もセッションの追加ワークスペースとして公開します。
+
 ## 🌐 セッションスコープ
 
 `SESSION_SCOPE` 環境変数でセッションの共有範囲を切り替えられます:
@@ -333,12 +371,16 @@ src/
 │   ├── copilot.ts        # GitHub Copilot SDK 実装
 │   ├── copilot_agent.ts  # Copilot 用 Agent ラッパー（ToolContext 実装）
 │   ├── claude.ts         # Claude Agent SDK 実装（モデル一覧/effort/binary 解決）
-│   └── claude_agent.ts   # Claude 用 Agent ラッパー（MCP 経由で Discord 操作）
+│   ├── claude_agent.ts   # Claude 用 Agent ラッパー（MCP 経由で Discord 操作）
+│   ├── codex.ts          # Codex SDK 実装
+│   ├── codex_agent.ts    # Codex 用 Agent ラッパー（MCP 経由で Discord 操作）
+│   ├── gemini.ts         # Gemini CLI / ACP 実装
+│   └── gemini_agent.ts   # Gemini 用 Agent ラッパー（MCP 経由で Discord 操作）
 ├── discord/
 │   ├── bot.ts            # Discord Bot 実装（イベントハンドリング・画像DL）
 │   └── messenger.ts      # Discord Messenger 実装（リアクション承認・ステータス）
 └── mcp/
-    └── server.ts         # Discord 操作用 stdio MCP サーバー（Claude provider が利用）
+    └── server.ts         # Discord 操作用 stdio MCP サーバー（Claude / Codex / Gemini provider が利用）
 ```
 
 ### 🏗️ アーキテクチャ
@@ -353,9 +395,13 @@ DiscordBot (discord/bot.ts)               ← Discord イベント受信
             │    └─ CopilotCodeProvider   ← Copilot セッション・リトライ・関数呼び出し
             │         ├─ Inbox / Tools / FunctionLoader
             │         └─ PermissionHandler
-            └─ ClaudeAgent  (providers/claude_agent.ts)
-                 └─ ClaudeCodeProvider    ← Claude Agent SDK ラップ（resume/effort/MCP）
-                      └─ Discord MCP server (mcp/server.ts)
+             ├─ ClaudeAgent  (providers/claude_agent.ts)
+             │    └─ ClaudeCodeProvider    ← Claude Agent SDK ラップ（resume/effort/MCP）
+             ├─ CodexAgent   (providers/codex_agent.ts)
+             │    └─ CodexCodeProvider     ← Codex SDK ラップ（thread/MCP）
+             └─ GeminiAgent  (providers/gemini_agent.ts)
+                  └─ GeminiCodeProvider    ← Gemini CLI (ACP) ラップ（session/MCP）
+                       └─ Discord MCP server (mcp/server.ts)
 
 Messenger (core/messenger.ts)             ← プラットフォーム抽象化
   └─ DiscordMessenger (discord/messenger.ts)
@@ -458,7 +504,7 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 
 ### Copilot SDK / Claude Agent SDK 組み込みツール
 
-各 SDK が提供する組み込みツール（`bash`, `view` / `Read`, `create` / `Write`, `edit`, `glob`, `grep`, `web_fetch` / `WebFetch` 等）も自動的に利用可能です。Claude provider では Discord 操作は同梱の MCP サーバー（`mcp__discord__*`）経由で行われます。
+各 SDK / CLI が提供する組み込みツール（`bash`, `view` / `Read`, `create` / `Write`, `edit`, `glob`, `grep`, `web_fetch` / `WebFetch` 等）も自動的に利用可能です。Claude / Codex / Gemini provider では Discord 操作は同梱の MCP サーバー（`mcp__discord__*`）経由で行われます。
 
 ## 🧩 関数システム
 
