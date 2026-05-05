@@ -16,8 +16,8 @@ import {
   type ThreadOptions,
   type WebSearchItem,
 } from '@openai/codex-sdk';
-import { BaseProvider } from './provider.js';
-import type { ProviderContext, ProviderOptions, ReasoningEffort } from './provider.js';
+import { BaseProvider, asJsonObject } from './provider.js';
+import type { JsonObject, ProviderContext, ProviderOptions, ReasoningEffort } from './provider.js';
 import { logger } from '../core/logger.js';
 
 const DEFAULT_TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
@@ -244,11 +244,8 @@ export class CodexCodeProvider extends BaseProvider {
     }
   }
 
-  private coerceArgs(args: unknown): Record<string, unknown> {
-    if (args && typeof args === 'object' && !Array.isArray(args)) {
-      return args as Record<string, unknown>;
-    }
-    return {};
+  private coerceArgs(args: unknown): JsonObject {
+    return asJsonObject(args) ?? {};
   }
 
   private getCodex(): Codex {

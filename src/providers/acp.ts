@@ -3,8 +3,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Readable, Writable } from 'stream';
 import * as acp from '@agentclientprotocol/sdk';
-import { BaseProvider, normalizeToolName } from './provider.js';
-import type { ContextUsageInfo, ProviderOptions } from './provider.js';
+import { BaseProvider, asJsonObject, normalizeToolName } from './provider.js';
+import type { ContextUsageInfo, JsonObject, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
 import { loadPermissionConfig, type PermissionConfig, type PermissionKind } from '../core/permissions.js';
 
@@ -48,7 +48,7 @@ function truncate(value: string, max = 120): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
-function readStringProperty(source: Record<string, unknown>, ...keys: string[]): string | null {
+function readStringProperty(source: JsonObject, ...keys: string[]): string | null {
   for (const key of keys) {
     const value = source[key];
     if (typeof value === 'string' && value.trim()) return value.trim();
@@ -84,8 +84,8 @@ function readToolNameFromPayload(value: unknown, depth = 0): string | null {
     }
     return null;
   }
-  if (typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
+  const record = asJsonObject(value);
+  if (!record) return null;
   const named = readStringProperty(record, 'toolName', 'tool', 'name', 'command');
   if (named) return named;
   for (const entry of Object.values(record)) {
@@ -105,8 +105,8 @@ function detectToolNameFromPayload(value: unknown, depth = 0): string | null {
     }
     return null;
   }
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
+  const record = asJsonObject(value);
+  if (record) {
     const named = readStringProperty(record, 'toolName', 'tool', 'name', 'command');
     if (named) {
       const stripped = normalizeToolName(named);
@@ -759,13 +759,11 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
     return truncate(update.title || '');
   }
 
-  protected extractDetailSource(value: unknown): Record<string, unknown> | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const record = value as Record<string, unknown>;
-    if (record.arguments && typeof record.arguments === 'object' && !Array.isArray(record.arguments)) {
-      return record.arguments as Record<string, unknown>;
-    }
-    return record;
+  protected extractDetailSource(value: unknown): JsonObject | null {
+    const record = asJsonObject(value);
+    if (!record) return null;
+    const args = asJsonObject(record.arguments);
+    return args ?? record;
   }
 
   protected validateFilePath(targetPath: string): string {

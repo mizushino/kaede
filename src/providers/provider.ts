@@ -50,6 +50,15 @@ export function normalizeToolName(toolName: string): string {
   }
 }
 
+/** Plain JSON object coming from external CLIs / MCP payloads. Keys are unknown until guarded. */
+export type JsonObject = Record<string, unknown>;
+
+/** Narrow an unknown payload to a plain JSON object (rejects null, arrays, primitives). */
+export function asJsonObject(value: unknown): JsonObject | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as JsonObject;
+}
+
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface ProviderOptions {
@@ -124,7 +133,7 @@ export abstract class BaseProvider {
     return normalizeToolName(toolName);
   }
 
-  protected formatToolDetail(toolName: string, input: Record<string, unknown>): string {
+  protected formatToolDetail(toolName: string, input: JsonObject): string {
     const readString = (...keys: string[]): string => {
       for (const key of keys) {
         const value = input[key];
