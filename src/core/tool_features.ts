@@ -24,11 +24,11 @@ function readBooleanEnv(name: string, defaultValue = true): boolean {
 }
 
 export function areFunctionManagementToolsEnabled(): boolean {
-  return readBooleanEnv('ENABLE_FUNCTION_MANAGEMENT_TOOLS', true);
+  return readBooleanEnv('ENABLE_FUNCTION_TOOLS', true);
 }
 
 export function areScheduleManagementToolsEnabled(): boolean {
-  return readBooleanEnv('ENABLE_SCHEDULE_MANAGEMENT_TOOLS', true);
+  return readBooleanEnv('ENABLE_SCHEDULE_TOOLS', true);
 }
 
 export function isDiscordToolEnabled(name: string): boolean {

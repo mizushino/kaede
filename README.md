@@ -128,12 +128,12 @@ AGENT=kaede npm start   # .env.kaede を読み込んで起動
 
 | 環境変数 | 説明 |
 |----------|------|
-| `ENABLE_FUNCTION_MANAGEMENT_TOOLS` | `0` / `false` で `list_funcs` / `read_func` / `write_func` / `delete_func` / `run_func` を無効にします |
-| `ENABLE_SCHEDULE_MANAGEMENT_TOOLS` | `0` / `false` で `add_schedule` / `list_schedules` / `remove_schedule` を無効にします |
+| `ENABLE_FUNCTION_TOOLS` | `0` / `false` で `list_funcs` / `read_func` / `write_func` / `delete_func` / `run_func` を無効にします |
+| `ENABLE_SCHEDULE_TOOLS` | `0` / `false` で `add_schedule` / `list_schedules` / `remove_schedule` を無効にします |
 
 ```sh
-ENABLE_FUNCTION_MANAGEMENT_TOOLS=0
-ENABLE_SCHEDULE_MANAGEMENT_TOOLS=0
+ENABLE_FUNCTION_TOOLS=0
+ENABLE_SCHEDULE_TOOLS=0
 ```
 
 ---
