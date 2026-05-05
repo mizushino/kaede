@@ -6,6 +6,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { BaseProvider } from './provider.js';
 import type { ContextUsageInfo, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
+import { loadPermissionConfig, type PermissionConfig, type PermissionKind } from '../core/permissions.js';
 
 const DEFAULT_TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
 
@@ -244,6 +245,7 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
   protected readonly additionalDirectories = buildAdditionalDirectories(this.cwd);
   protected readonly allowedRoots = uniquePaths([this.cwd, ...this.additionalDirectories]);
   protected readonly toolSnapshots = new Map<string, ToolSnapshot>();
+  protected readonly permissionConfig: PermissionConfig = loadPermissionConfig();
 
   /** CLI binary path (e.g. "gemini"). */
   protected abstract resolveCommand(): string;
@@ -353,7 +355,7 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
   async requestPermission(
     params: acp.RequestPermissionRequest,
   ): Promise<acp.RequestPermissionResponse> {
-    if (this.isTrustedMcpTool(params.toolCall)) {
+    if (this.isTrustedMcpTool(params.toolCall) || this.isAutoApproved(params.toolCall)) {
       const auto = params.options.find(option => option.kind === 'allow_always')
         ?? params.options.find(option => option.kind === 'allow_once')
         ?? params.options[0];
@@ -623,6 +625,34 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
     }
     const title = update.title || '';
     return /\(discord MCP Server\)/i.test(title);
+  }
+
+  protected isAutoApproved(update: ToolSnapshot): boolean {
+    if (this.permissionConfig.approveAll) return true;
+    const kind = this.mapToolKindToPermission(update);
+    if (!kind) return false;
+    return this.permissionConfig.autoApprove.has(kind);
+  }
+
+  protected mapToolKindToPermission(update: ToolSnapshot): PermissionKind | null {
+    switch (update.kind) {
+      case 'execute': return 'shell';
+      case 'read': return 'read';
+      case 'search': return 'read';
+      case 'edit':
+      case 'delete':
+      case 'move': return 'write';
+      case 'fetch': return 'url';
+      case 'think':
+      case 'switch_mode': return null;
+      case 'other':
+      default: {
+        const rawName = readToolNameFromPayload(update.rawInput)
+          || readToolNameFromPayload(update.rawOutput)
+          || '';
+        return rawName ? 'mcp' : 'custom-tool';
+      }
+    }
   }
 
   protected describeToolName(update: ToolSnapshot): string {
