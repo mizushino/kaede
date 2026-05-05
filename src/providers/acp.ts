@@ -25,14 +25,14 @@ export interface ToolSnapshot {
   title?: string | null;
 }
 
-export function isWithinRoot(targetPath: string, rootPath: string): boolean {
+function isWithinRoot(targetPath: string, rootPath: string): boolean {
   const normalizedTarget = path.resolve(targetPath);
   const normalizedRoot = path.resolve(rootPath);
   if (normalizedTarget === normalizedRoot) return true;
   return normalizedTarget.startsWith(`${normalizedRoot}${path.sep}`);
 }
 
-export function uniquePaths(paths: string[]): string[] {
+function uniquePaths(paths: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const entry of paths.map(value => path.resolve(value))) {
@@ -44,7 +44,7 @@ export function uniquePaths(paths: string[]): string[] {
   return result;
 }
 
-export function truncate(value: string, max = 120): string {
+function truncate(value: string, max = 120): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
@@ -63,14 +63,14 @@ const KNOWN_TOOL_NAMES = [
   'web_fetch', 'web_search', 'glob', 'grep', 'view', 'edit', 'bash',
 ];
 
-export function stripMcpPrefix(name: string): string {
+function stripMcpPrefix(name: string): string {
   if (name.startsWith('mcp__discord__')) return name.slice('mcp__discord__'.length);
   if (name.startsWith('discord__')) return name.slice('discord__'.length);
   if (name.startsWith('discord.') || name.startsWith('discord:')) return name.slice('discord.'.length);
   return name;
 }
 
-export function detectToolNameFromText(text: string): string | null {
+function detectToolNameFromText(text: string): string | null {
   const tokens = text.match(/\b([a-z_][a-z0-9_]*)\b/gi);
   if (!tokens) return null;
   for (const token of tokens) {
@@ -82,7 +82,7 @@ export function detectToolNameFromText(text: string): string | null {
   return null;
 }
 
-export function readToolNameFromPayload(value: unknown, depth = 0): string | null {
+function readToolNameFromPayload(value: unknown, depth = 0): string | null {
   if (depth > 2 || value == null) return null;
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -102,7 +102,7 @@ export function readToolNameFromPayload(value: unknown, depth = 0): string | nul
   return null;
 }
 
-export function detectToolNameFromPayload(value: unknown, depth = 0): string | null {
+function detectToolNameFromPayload(value: unknown, depth = 0): string | null {
   if (depth > 2 || value == null) return null;
   if (typeof value === 'string') return detectToolNameFromText(value);
   if (Array.isArray(value)) {
@@ -129,14 +129,14 @@ export function detectToolNameFromPayload(value: unknown, depth = 0): string | n
   return null;
 }
 
-export function buildAdditionalDirectories(cwd: string): string[] {
+function buildAdditionalDirectories(cwd: string): string[] {
   return uniquePaths([
     path.resolve(process.cwd()),
     DEFAULT_TEMPORARY_DIR,
   ]).filter(entry => entry !== cwd);
 }
 
-export function buildDiscordMcpServer(sessionKey: string): acp.McpServerStdio {
+function buildDiscordMcpServer(sessionKey: string): acp.McpServerStdio {
   const repoRoot = path.resolve(process.cwd());
   const agent = process.env.AGENT || process.env.AGENT_NAME || '';
   const env: acp.EnvVariable[] = [
@@ -155,7 +155,7 @@ export function buildDiscordMcpServer(sessionKey: string): acp.McpServerStdio {
   };
 }
 
-export function getSessionStateFilePath(subdir: string, sessionKey: string): string {
+function getSessionStateFilePath(subdir: string, sessionKey: string): string {
   const safe = encodeURIComponent(sessionKey);
   return path.join(DEFAULT_TEMPORARY_DIR, subdir, `${safe}.json`);
 }
@@ -169,7 +169,7 @@ export interface AcpSpawnConfig {
   logTag?: string;
 }
 
-export function formatSpawnError(command: string, err: unknown): Error {
+function formatSpawnError(command: string, err: unknown): Error {
   const error = err instanceof Error ? err : new Error(String(err));
   const code = (error as Error & { code?: string }).code;
   if (code === 'ENOENT') {
