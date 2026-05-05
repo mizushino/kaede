@@ -8,7 +8,7 @@ import { writeFile } from 'fs/promises';
 import { logger } from './logger.js';
 
 export type SessionScope = 'channel' | 'server';
-export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex', 'gemini'] as const;
+export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex', 'gemini', 'acp'] as const;
 export type AgentProviderType = typeof AGENT_PROVIDER_TYPES[number];
 
 const DEFAULT_PROVIDER: AgentProviderType = 'copilot';
@@ -17,6 +17,7 @@ const PROVIDER_SDK_PACKAGE: Record<AgentProviderType, string> = {
   claude: '@anthropic-ai/claude-agent-sdk @anthropic-ai/claude-code',
   codex: '@openai/codex-sdk',
   gemini: '@agentclientprotocol/sdk @google/gemini-cli',
+  acp: '@agentclientprotocol/sdk',
 };
 
 export interface Agent {
@@ -102,6 +103,11 @@ export abstract class Bot {
         case 'gemini': {
           const mod = await import('../providers/gemini_agent.js');
           this.agentClass = mod.GeminiAgent;
+          return;
+        }
+        case 'acp': {
+          const mod = await import('../providers/acp_generic_agent.js');
+          this.agentClass = mod.GenericAcpAgent;
           return;
         }
       }

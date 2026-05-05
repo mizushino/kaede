@@ -102,7 +102,7 @@ npm start
 
 ## 🤖 AI Provider
 
-Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemini CLI (ACP)** の 4 つの AI Provider に対応しています。`AGENT_PROVIDER` 環境変数で切り替えます。
+Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemini CLI (ACP)**、**汎用 ACP**（環境変数だけで任意の ACP 対応 CLI を接続）の 5 つの AI Provider に対応しています。`AGENT_PROVIDER` 環境変数で切り替えます。
 
 | `AGENT_PROVIDER` | 実行方式 | 主なモデル環境変数 |
 |------------------|----------|--------------------|
@@ -110,6 +110,7 @@ Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemi
 | `claude` | Claude Agent SDK (`claude`) | `AGENT_MODEL` |
 | `codex` | OpenAI Codex SDK (`codex`) | `AGENT_MODEL` |
 | `gemini` | Gemini CLI (`gemini --acp`) | `AGENT_MODEL` |
+| `acp` | 任意の ACP CLI（`ACP_COMMAND` で指定） | `AGENT_MODEL` |
 
 ### 切り替え方法
 
@@ -305,6 +306,26 @@ npx gemini   # 起動して画面の指示に従いログイン
 
 > **Note:** Gemini provider は ACP の file-system proxy を使うため、`WORKSPACE_DIR` に加えてリポジトリルートと `TEMPORARY_DIR` もセッションの追加ワークスペースとして公開します。
 
+### 🤖 汎用 ACP（`AGENT_PROVIDER=acp`）
+
+任意の ACP（Agent Client Protocol）対応 CLI を、専用 provider クラスを書かずに環境変数だけで接続できる汎用 provider です。
+
+#### ACP 関連の環境変数
+
+| 環境変数 | 説明 |
+|----------|------|
+| `ACP_COMMAND` | **必須**。ACP CLI の実行ファイルパス |
+| `ACP_ARGS` | CLI に渡す引数（スペース区切り、既定: `--acp`） |
+| `ACP_NAME` | provider のスラグ名（既定: `acp`） |
+| `ACP_DISPLAY_NAME` | 表示名（既定: `ACP`） |
+| `ACP_ICON` | ステータスアイコン絵文字（既定: 🤖） |
+| `ACP_STATE_SUBDIR` | セッション状態の保存先サブディレクトリ（既定: `acp-sessions`） |
+| `ACP_APPROVAL_MODE` | 初期セッションモード（既定: `default`） |
+| `ACP_CONTEXT_WINDOW` | コンテキストウィンドウのトークン数（既定: 1,048,576） |
+| `ACP_PROMPT_HEADING` | 権限プロンプトの見出し |
+| `ACP_AUTH_ERROR_MATCH` | 致命的な認証エラーと判定する部分文字列（既定: `authentication`） |
+| `ACP_ENV_<NAME>` | CLI に追加で渡す環境変数（プレフィックスは除去されます） |
+
 ## 🌐 セッションスコープ
 
 `SESSION_SCOPE` 環境変数でセッションの共有範囲を切り替えられます:
@@ -375,7 +396,11 @@ src/
 │   ├── codex.ts          # Codex SDK 実装
 │   ├── codex_agent.ts    # Codex 用 Agent ラッパー（MCP 経由で Discord 操作）
 │   ├── gemini.ts         # Gemini CLI / ACP 実装
-│   └── gemini_agent.ts   # Gemini 用 Agent ラッパー（MCP 経由で Discord 操作）
+│   ├── gemini_agent.ts   # Gemini 用 Agent ラッパー（MCP 経由で Discord 操作）
+│   ├── acp.ts            # ACP 共通基底クラス（接続/セッション/権限/ファイルIO）
+│   ├── acp_agent.ts      # ACP 用 Agent ラッパー（McpAgent を継承）
+│   ├── acp_generic.ts    # 環境変数駆動の汎用 ACP provider
+│   └── acp_generic_agent.ts # 汎用 ACP Agent ラッパー
 ├── discord/
 │   ├── bot.ts            # Discord Bot 実装（イベントハンドリング・画像DL）
 │   └── messenger.ts      # Discord Messenger 実装（リアクション承認・ステータス）
