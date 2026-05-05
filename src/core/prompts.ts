@@ -15,46 +15,60 @@ export interface PromptFile {
 
 export class PromptLoader {
   private prompts = new Map<string, PromptFile>();
-  private promptsDir: string;
+  private promptDirs: string[];
 
   constructor(promptsDir?: string) {
-    // Default to {WORKSPACE}/.github/prompts
+    // Default to {WORKSPACE}/.github/prompts plus {WORKSPACE}/prompts.
     const workspaceDir = process.env.WORKSPACE_DIR || './workspace';
-    const defaultDir = path.join(workspaceDir, '.github/prompts');
-    this.promptsDir = path.resolve(promptsDir || defaultDir);
+    const defaultDirs = [
+      path.join(workspaceDir, '.github/prompts'),
+      path.join(workspaceDir, 'prompts'),
+    ];
+    this.promptDirs = promptsDir
+      ? [path.resolve(promptsDir)]
+      : defaultDirs.map(dir => path.resolve(dir));
   }
 
   /**
-   * Load all .prompt.md files from the prompts directory
+   * Load all .prompt.md files from the configured prompt directories.
    */
   async loadPrompts(): Promise<Map<string, PromptFile>> {
     this.prompts.clear();
 
-    if (!fs.existsSync(this.promptsDir)) {
-      logger.log(`[PROMPTS] Directory not found: ${this.promptsDir}`);
-      return this.prompts;
-    }
+    let loadedDirectoryCount = 0;
 
-    try {
-      const files = fs.readdirSync(this.promptsDir);
-      const promptFiles = files.filter(file => file.endsWith('.prompt.md'));
-
-      for (const file of promptFiles) {
-        const filePath = path.join(this.promptsDir, file);
-        try {
-          const prompt = await this.parsePromptFile(filePath);
-          this.prompts.set(prompt.name, prompt);
-          logger.log(`[PROMPTS] Loaded: ${prompt.name} (${file})`);
-        } catch (err) {
-          logger.error(`[PROMPTS] Failed to parse ${file}:`, err);
-        }
+    for (const promptDir of this.promptDirs) {
+      if (!fs.existsSync(promptDir)) {
+        logger.log(`[PROMPTS] Directory not found: ${promptDir}`);
+        continue;
       }
 
-      logger.log(`[PROMPTS] Loaded ${this.prompts.size} prompt(s)`);
-    } catch (err) {
-      logger.error('[PROMPTS] Failed to load prompts:', err);
+      loadedDirectoryCount += 1;
+
+      try {
+        const files = fs.readdirSync(promptDir);
+        const promptFiles = files.filter(file => file.endsWith('.prompt.md'));
+
+        for (const file of promptFiles) {
+          const filePath = path.join(promptDir, file);
+          try {
+            const prompt = await this.parsePromptFile(filePath);
+            const existing = this.prompts.get(prompt.name);
+            if (existing) {
+              logger.log(`[PROMPTS] Overriding: ${prompt.name} (${existing.filePath} -> ${filePath})`);
+            }
+            this.prompts.set(prompt.name, prompt);
+            logger.log(`[PROMPTS] Loaded: ${prompt.name} (${filePath})`);
+          } catch (err) {
+            logger.error(`[PROMPTS] Failed to parse ${file}:`, err);
+          }
+        }
+      } catch (err) {
+        logger.error(`[PROMPTS] Failed to load prompts from ${promptDir}:`, err);
+      }
     }
 
+    logger.log(`[PROMPTS] Loaded ${this.prompts.size} prompt(s) from ${loadedDirectoryCount} director${loadedDirectoryCount === 1 ? 'y' : 'ies'}`);
     return this.prompts;
   }
 
