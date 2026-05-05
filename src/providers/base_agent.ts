@@ -1,6 +1,6 @@
 import type { Agent } from '../core/bot.js';
 import type { RequestCounter } from '../core/counter.js';
-import type { Inbox, IncomingMessage, QueuedMessage } from '../core/inbox.js';
+import { Inbox, type IncomingMessage, type QueuedMessage } from '../core/inbox.js';
 import type { Messenger } from '../core/messenger.js';
 import type { Scheduler } from '../core/scheduler.js';
 import { logger } from '../core/logger.js';
@@ -21,17 +21,36 @@ export type ModelListing = {
  * processing loop and dispose plumbing common to all providers.
  */
 export abstract class BaseAgent implements Agent {
-  abstract model: string;
-  abstract reasoningEffort: ReasoningEffort | '';
-  abstract messenger: Messenger;
-  abstract readonly counter: RequestCounter;
-  abstract readonly scheduler: Scheduler;
-  abstract readonly sessionKey: string;
-  abstract readonly botUserId: string;
-  abstract queue: Inbox;
+  model: string;
+  reasoningEffort: ReasoningEffort | '' = '';
+  readonly messenger: Messenger;
+  readonly workspaceDir: string;
+  readonly counter: RequestCounter;
+  readonly scheduler: Scheduler;
+  readonly sessionKey: string;
+  readonly botUserId: string;
+  readonly queue = new Inbox();
 
   protected processingPromise: Promise<void> | null = null;
   protected readonly maxRetries = DEFAULT_MAX_RETRIES;
+
+  constructor(
+    messenger: Messenger,
+    workspaceDir: string,
+    model: string,
+    counter: RequestCounter,
+    scheduler: Scheduler,
+    sessionKey?: string,
+    botUserId?: string,
+  ) {
+    this.messenger = messenger;
+    this.workspaceDir = workspaceDir;
+    this.model = model;
+    this.counter = counter;
+    this.scheduler = scheduler;
+    this.sessionKey = sessionKey ?? messenger.channelId;
+    this.botUserId = botUserId ?? '';
+  }
 
   protected abstract get provider(): BaseProvider;
   protected abstract logTag(): string;

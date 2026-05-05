@@ -1,7 +1,7 @@
 import path from 'path';
 import { CopilotClientManager } from '../core/client.js';
 import { FunctionLoader } from '../core/functions.js';
-import { Inbox, QueuedMessage } from '../core/inbox.js';
+import { QueuedMessage } from '../core/inbox.js';
 import type { Messenger } from '../core/messenger.js';
 import { loadPermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
@@ -12,16 +12,6 @@ import { BaseAgent, type ModelListing } from './base_agent.js';
 import { CopilotCodeProvider, DEFAULT_REASONING_EFFORT, type CopilotSendErrorAction, type ReasoningEffort } from './copilot.js';
 
 export class CopilotAgent extends BaseAgent {
-	model: string;
-	reasoningEffort: ReasoningEffort | '';
-	messenger: Messenger;
-	queue = new Inbox();
-	readonly functionLoader: FunctionLoader;
-	readonly counter: RequestCounter;
-	readonly scheduler: Scheduler;
-	readonly sessionKey: string;
-	readonly botUserId: string;
-
 	/** Shared Copilot client manager for the process. Lazily created. */
 	private static sharedClientManager: CopilotClientManager | null = null;
 
@@ -66,19 +56,14 @@ export class CopilotAgent extends BaseAgent {
 
 	private readonly clientManager: CopilotClientManager;
 	protected readonly provider: CopilotCodeProvider;
+	readonly functionLoader: FunctionLoader;
 
 	constructor(messenger: Messenger, workspaceDir: string, model: string, counter: RequestCounter, scheduler: Scheduler, sessionKey?: string, botUserId?: string) {
-		super();
-		this.messenger = messenger;
-		this.model = model;
+		super(messenger, workspaceDir, model, counter, scheduler, sessionKey, botUserId);
 		this.reasoningEffort = DEFAULT_REASONING_EFFORT;
 		this.clientManager = CopilotAgent.getClientManager();
-		this.botUserId = botUserId ?? '';
 		const functionsDir = process.env.FUNCTIONS_DIR || path.join(workspaceDir, 'functions');
 		this.functionLoader = new FunctionLoader(functionsDir);
-		this.counter = counter;
-		this.scheduler = scheduler;
-		this.sessionKey = sessionKey ?? messenger.channelId;
 		this.provider = new CopilotCodeProvider({
 			channelId: messenger.channelId,
 			messenger,

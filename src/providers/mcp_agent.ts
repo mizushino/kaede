@@ -1,6 +1,6 @@
 import path from 'path';
 import type { Messenger } from '../core/messenger.js';
-import { Inbox, QueuedMessage } from '../core/inbox.js';
+import { QueuedMessage } from '../core/inbox.js';
 import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
 import { getClaudeDiscordPromptSignatures } from '../core/tool_contract.js';
@@ -36,16 +36,6 @@ export interface McpAgentConfig {
  * providers are passed in via {@link McpAgentConfig}.
  */
 export class McpAgent extends BaseAgent {
-  model: string;
-  reasoningEffort: ReasoningEffort | '' = '';
-  messenger: Messenger;
-  queue = new Inbox();
-  readonly counter: RequestCounter;
-  readonly scheduler: Scheduler;
-  readonly sessionKey: string;
-  readonly botUserId: string;
-
-  private readonly workspaceDir: string;
   private readonly config: McpAgentConfig;
   protected provider: BaseProvider;
 
@@ -59,15 +49,8 @@ export class McpAgent extends BaseAgent {
     sessionKey?: string,
     botUserId?: string,
   ) {
-    super();
+    super(messenger, workspaceDir, model, counter, scheduler, sessionKey, botUserId);
     this.config = config;
-    this.messenger = messenger;
-    this.workspaceDir = workspaceDir;
-    this.model = model;
-    this.counter = counter;
-    this.scheduler = scheduler;
-    this.sessionKey = sessionKey ?? messenger.channelId;
-    this.botUserId = botUserId ?? '';
     this.provider = this.spawnProvider();
   }
 
