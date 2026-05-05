@@ -167,8 +167,8 @@ GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, 
 
 | 環境変数 | 必須 | 説明 |
 |----------|------|------|
-| `COPILOT_PROVIDER_BASE_URL` | ✅ | モデルプロバイダーの API エンドポイント |
 | `AGENT_MODEL` | ✅ | 使用するモデル識別子 |
+| `COPILOT_PROVIDER_BASE_URL` | ✅ | モデルプロバイダーの API エンドポイント |
 | `COPILOT_PROVIDER_TYPE` | - | プロバイダーの種類: `openai`（デフォルト）, `azure`, `anthropic` |
 | `COPILOT_PROVIDER_API_KEY` | - | プロバイダーの API キー（Ollama などローカルプロバイダーには不要） |
 | `COPILOT_MAX_CONTEXT_WINDOW_TOKENS` | - | オープンモデルなどでコンテキスト長を明示したい場合の上書き値 |
