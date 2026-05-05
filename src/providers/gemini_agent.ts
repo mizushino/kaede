@@ -3,11 +3,11 @@ import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
 import { GeminiCodeProvider } from './gemini.js';
 import type { ModelListing } from './base_agent.js';
-import { McpAgent, type McpAgentConfig } from './mcp_agent.js';
+import { AcpAgent, type AcpAgentConfig } from './acp_agent.js';
 
 export type { ReasoningEffort } from './mcp_agent.js';
 
-const GEMINI_CONFIG: McpAgentConfig = {
+const GEMINI_CONFIG: AcpAgentConfig = {
   providerName: 'gemini',
   fatalAuthErrorMatch: 'authentication',
   createProvider: (args) => new GeminiCodeProvider(args),
@@ -17,7 +17,7 @@ const GEMINI_CONFIG: McpAgentConfig = {
   ],
 };
 
-export class GeminiAgent extends McpAgent {
+export class GeminiAgent extends AcpAgent {
   constructor(
     messenger: Messenger,
     workspaceDir: string,
@@ -32,18 +32,6 @@ export class GeminiAgent extends McpAgent {
 
   static async listModels(): Promise<ModelListing> {
     const models = await GeminiCodeProvider.listModels({ workspaceDir: process.env.WORKSPACE_DIR });
-    return {
-      models: models.map(model => ({
-        id: model.id,
-        displayName: model.displayName,
-        detail: model.description || '-',
-        autocompleteLabel: model.description ? `${model.id} — ${model.description}` : model.id,
-      })),
-      columns: [
-        { key: 'id', header: 'MODEL' },
-        { key: 'detail', header: 'DETAIL' },
-      ],
-      footnote: '',
-    };
+    return AcpAgent.buildModelListing(models);
   }
 }
