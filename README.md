@@ -144,6 +144,17 @@ ENABLE_FUNCTION_TOOLS=0
 ENABLE_SCHEDULE_TOOLS=0
 ```
 
+#### 応答モード（誰に反応するかを絞る）
+
+すべてのメッセージに反応させずに、メンション・名前呼びかけ時だけ動かしたい場合に使います。
+
+| 環境変数 | 説明 |
+|----------|------|
+| `RESPONSE_MODE` | `all`（既定: 全メッセージ） / `mention`（@メンション・リプライのみ） / `keyword`（メンション or キーワード一致） |
+| `RESPONSE_KEYWORDS` | カンマ区切り、大文字小文字無視の部分一致。空の場合は `AGENT_NAME` を使用 |
+
+`/response` スラッシュコマンドでチャンネルごとに上書きでき、`workspace/response_overrides.json` に保存されます。`mention` / `keyword` モードでも、自分への @メンションやリプライには常に反応します。
+
 ---
 
 ### 🐙 GitHub Copilot（`AGENT_PROVIDER=copilot`）
@@ -456,6 +467,7 @@ Discord のスラッシュコマンドとして利用できます。
 | コマンド | 説明 |
 |----------|------|
 | `/clear` | 現在のセッションをリセット（会話履歴・CLI セッションを削除） |
+| `/response status` / `set <mode>` / `reset` | チャンネルごとの応答モードを表示・上書き・解除（`all` / `mention` / `keyword`） |
 | `/stats [days]` | リクエスト利用統計を表示（`days` で日数指定、1〜90、デフォルト 7） |
 | `/context` | 現在のコンテキストウィンドウ使用量を表示（Copilot / Claude Agent SDK 両対応。1ターン以上やり取り後に利用可能） |
 | `/restart [env]` | Bot プロセスを再起動（`env` 指定で `.env.<name>` に切り替え可能） |

@@ -16,6 +16,7 @@ import { DiscordMessenger } from './messenger.js';
 import { PromptLoader } from '../core/prompts.js';
 import { logger } from '../core/logger.js';
 import { areFunctionManagementToolsEnabled, areScheduleManagementToolsEnabled } from '../core/tool_features.js';
+import { ResponseFilter, isResponseMode, type ResponseMode } from './response_filter.js';
 
 const ENV_SWITCH_IGNORED = new Set(['claude', 'copilot']);
 const ENV_SWITCH_IGNORE_PREFIXES = ['example', 'defaults'];
@@ -23,9 +24,11 @@ const ENV_SWITCH_IGNORE_PREFIXES = ['example', 'defaults'];
 export class DiscordBot extends Bot {
   readonly discord: Client;
   private promptLoader: PromptLoader;
+  private responseFilter: ResponseFilter;
 
   constructor() {
     super();
+    this.responseFilter = new ResponseFilter(this.workspaceDir);
     this.discord = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -62,6 +65,23 @@ export class DiscordBot extends Bot {
       new SlashCommandBuilder()
         .setName('clear')
         .setDescription('Clear the current AI session'),
+      new SlashCommandBuilder()
+        .setName('response')
+        .setDescription('Manage per-channel response mode')
+        .addSubcommand(sub =>
+          sub.setName('status').setDescription('Show effective response mode for this channel'))
+        .addSubcommand(sub =>
+          sub.setName('set')
+            .setDescription('Override the response mode for this channel')
+            .addStringOption(opt =>
+              opt.setName('mode').setDescription('Response mode').setRequired(true)
+                .addChoices(
+                  { name: 'all (respond to every message)', value: 'all' },
+                  { name: 'mention (only @ or reply)', value: 'mention' },
+                  { name: 'keyword (mention or name keyword)', value: 'keyword' },
+                )))
+        .addSubcommand(sub =>
+          sub.setName('reset').setDescription('Remove channel override (use default)')),
       new SlashCommandBuilder()
         .setName('stats')
         .setDescription('Show request usage statistics')
@@ -222,6 +242,46 @@ export class DiscordBot extends Bot {
     if (interaction.commandName === 'clear') {
       await this.clearAgent(interaction.channelId, interaction.guildId ?? undefined);
       await interaction.reply('🔄 Session cleared');
+      return;
+    }
+
+    if (interaction.commandName === 'response') {
+      const sub = interaction.options.getSubcommand();
+      const channelId = interaction.channelId;
+      if (sub === 'status') {
+        const effective = this.responseFilter.getEffectiveMode(channelId);
+        const override = this.responseFilter.getOverride(channelId);
+        const def = this.responseFilter.getDefaultMode();
+        const kw = this.responseFilter.getKeywords();
+        const kwLine = kw.length > 0 ? `\nKeywords: \`${kw.join(', ')}\`` : '';
+        const overrideLine = override
+          ? `Override: \`${override}\``
+          : `Override: (none — using default)`;
+        await interaction.reply({
+          content: `🎛️ **Response settings**\nEffective mode: \`${effective}\`\n${overrideLine}\nDefault: \`${def}\`${kwLine}`,
+          ephemeral: true,
+        });
+      } else if (sub === 'set') {
+        const mode = interaction.options.getString('mode', true);
+        if (!isResponseMode(mode)) {
+          await interaction.reply({ content: `❌ Invalid mode: \`${mode}\``, ephemeral: true });
+          return;
+        }
+        this.responseFilter.setOverride(channelId, mode as ResponseMode);
+        const warning = (mode === 'keyword' && this.responseFilter.getKeywords().length === 0)
+          ? '\n⚠️ Keywords are not configured (`RESPONSE_KEYWORDS` and `AGENT_NAME` are both empty). Non-mention messages will be ignored.'
+          : '';
+        await interaction.reply({ content: `✅ Channel response mode set to \`${mode}\`${warning}`, ephemeral: true });
+      } else if (sub === 'reset') {
+        const removed = this.responseFilter.clearOverride(channelId);
+        const def = this.responseFilter.getDefaultMode();
+        await interaction.reply({
+          content: removed
+            ? `✅ Override removed. Falling back to default \`${def}\`.`
+            : `ℹ️ No override was set. Default is \`${def}\`.`,
+          ephemeral: true,
+        });
+      }
       return;
     }
 
@@ -579,6 +639,13 @@ export class DiscordBot extends Bot {
       if (this.isDuplicate(message.id)) return;
 
       logger.log(`[BOT] Message from ${message.author.username}: ${message.content || '[Attachments]'}`);
+
+      const botUserId = this.discord.user?.id ?? '';
+      if (!this.responseFilter.shouldRespond(message, botUserId)) {
+        const mode = this.responseFilter.getEffectiveMode(message.channel.id);
+        logger.log(`[BOT] Skipped (mode=${mode}, channel=${message.channel.id})`);
+        return;
+      }
 
       // Download attachments
       const imageAttachments: string[] = [];
