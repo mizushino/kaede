@@ -4,6 +4,7 @@ dist/
 .env.*
 !.env.example.*
 *.config.cjs
+!ecosystem.config.cjs
 *.log
 .DS_Store
 coverage/
