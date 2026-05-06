@@ -2,6 +2,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpProvider, listAcpModels } from './acp.js';
+import { logger } from '../core/logger.js';
 
 const SESSION_STATE_DIRNAME = 'gemini-sessions';
 const DEFAULT_APPROVAL_MODE = 'default';
@@ -80,9 +81,23 @@ export class GeminiCodeProvider extends AcpProvider {
   }
 
   protected override getProviderEnv(): Record<string, string> {
-    return {
+    const env: Record<string, string> = {
       GEMINI_CLI_TRUST_WORKSPACE: process.env.GEMINI_CLI_TRUST_WORKSPACE ?? 'true',
     };
+
+    if (!process.env.GEMINI_SYSTEM_MD?.trim()) {
+      const agentsMdPath = process.env.AGENTS_MD_PATH?.trim();
+      if (agentsMdPath) {
+        const resolvedPath = path.resolve(agentsMdPath);
+        if (existsSync(resolvedPath)) {
+          env.GEMINI_SYSTEM_MD = resolvedPath;
+        } else {
+          logger.error(`[gemini] AGENTS_MD_PATH not found: ${resolvedPath}`);
+        }
+      }
+    }
+
+    return env;
   }
 
   protected override getPermissionPromptHeading(): string {
