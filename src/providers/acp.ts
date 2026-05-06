@@ -382,6 +382,13 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
   }
 
   override async deleteSession(): Promise<void> {
+    if (this.connection && this.sessionId) {
+      try {
+        await this.connection.closeSession({ sessionId: this.sessionId });
+      } catch (err) {
+        logger.log('[' + this.name + '] Best-effort session close failed: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    }
     await this.shutdownConnection();
     this.sessionId = null;
     this.currentModelId = '';

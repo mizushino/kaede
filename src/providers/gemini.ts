@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpProvider, listAcpModels } from './acp.js';
@@ -128,5 +129,34 @@ export class GeminiCodeProvider extends AcpProvider {
     }
 
     return { used, modelId };
+  }
+
+  override async deleteSession(): Promise<void> {
+    const sessionId = this.sessionId;
+    await super.deleteSession();
+    if (sessionId) {
+      await this.cleanupCliHistory(sessionId);
+    }
+  }
+
+  private async cleanupCliHistory(sessionId: string): Promise<void> {
+    try {
+      const home = process.env.HOME || process.env.USERPROFILE;
+      if (!home) return;
+
+      const chatsDir = path.join(home, '.gemini', 'tmp', 'workspace', 'chats');
+      if (!existsSync(chatsDir)) return;
+
+      const files = await fs.readdir(chatsDir);
+      const sessionFiles = files.filter(f => f.includes(sessionId) && f.endsWith('.jsonl'));
+
+      for (const file of sessionFiles) {
+        const fullPath = path.join(chatsDir, file);
+        await fs.unlink(fullPath);
+        logger.log('[gemini] Cleaned up CLI history file: ' + file);
+      }
+    } catch (err) {
+      logger.log('[gemini] Best-effort CLI history cleanup failed: ' + (err instanceof Error ? err.message : String(err)));
+    }
   }
 }
