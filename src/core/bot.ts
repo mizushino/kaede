@@ -35,6 +35,7 @@ export interface Agent {
 export abstract class Bot {
   protected readonly workspaceDir: string;
   protected readonly temporaryDir: string;
+  protected readonly configDir: string;
   protected readonly functionsDir: string;
   protected readonly agentName: string;
   protected readonly providerType: AgentProviderType;
@@ -50,18 +51,21 @@ export abstract class Bot {
     this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
     this.functionsDir = process.env.FUNCTIONS_DIR || path.join(this.workspaceDir, 'functions');
     this.agentName = process.env.AGENT_NAME || 'agent';
+    this.configDir = path.resolve(process.env.CONFIG_DIR || path.join('.kaede', this.agentName));
     this.providerType = this.normalizeProvider(process.env.AGENT_PROVIDER);
     this.model = this.resolveInitialModel(this.providerType);
     this.sessionScope = (process.env.SESSION_SCOPE as SessionScope) || 'channel';
-    this.counter = new RequestCounter(this.temporaryDir);
+    this.counter = new RequestCounter(this.configDir);
     this.scheduler = new Scheduler(
-      path.join(this.workspaceDir, 'schedules.json'),
+      path.join(this.configDir, 'schedules.json'),
       (entry) => this.onScheduleFire(entry),
     );
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
+    fs.mkdirSync(this.configDir, { recursive: true });
     logger.log(`[BOT] Agent name: ${this.agentName}`);
     logger.log(`[BOT] Provider: ${this.providerType}`);
+    logger.log(`[BOT] Config dir: ${this.configDir}`);
     logger.log(`[BOT] Session scope: ${this.sessionScope}`);
   }
 

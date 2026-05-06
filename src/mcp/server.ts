@@ -14,7 +14,9 @@ import { logger } from '../core/logger.js';
 
 const WORKSPACE_DIR = path.resolve(process.env.WORKSPACE_DIR || 'workspace');
 const FUNCTIONS_DIR = path.resolve(process.env.FUNCTIONS_DIR || path.join(WORKSPACE_DIR, 'functions'));
-const SCHEDULES_PATH = path.join(WORKSPACE_DIR, 'schedules.json');
+const AGENT_NAME = process.env.AGENT_NAME || 'agent';
+const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || path.join('.kaede', AGENT_NAME));
+const SCHEDULES_PATH = path.join(CONFIG_DIR, 'schedules.json');
 const TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
 const MCP_SESSION_KEY = process.env.KAEDE_SESSION_KEY || '';
 

@@ -28,7 +28,7 @@ export class DiscordBot extends Bot {
 
   constructor() {
     super();
-    this.responseFilter = new ResponseFilter(this.workspaceDir);
+    this.responseFilter = new ResponseFilter(this.configDir);
     this.discord = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -205,7 +205,7 @@ export class DiscordBot extends Bot {
     } else if (interaction.commandName === 'schedule') {
       const { readFile } = await import('fs/promises');
       try {
-        const data = JSON.parse(await readFile(path.join(this.workspaceDir, 'schedules.json'), 'utf-8')) as { id: string; description?: string; cron?: string; enabled?: boolean }[];
+        const data = JSON.parse(await readFile(path.join(this.configDir, 'schedules.json'), 'utf-8')) as { id: string; description?: string; cron?: string; enabled?: boolean }[];
         const choices = data
           .map(s => {
             const label = s.description ? `${s.id} — ${s.description}` : s.id;

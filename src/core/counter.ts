@@ -24,7 +24,7 @@ export class RequestCounter {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(dir: string) {
-    this.filePath = path.join(dir, 'request_counts.json');
+    this.filePath = path.join(dir, 'requests.json');
     this.logs = this.load();
   }
 

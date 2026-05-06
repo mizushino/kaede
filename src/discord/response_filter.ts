@@ -21,7 +21,7 @@ export class ResponseFilter {
   private readonly overridesPath: string;
   private overrides: OverridesFile = {};
 
-  constructor(workspaceDir: string) {
+  constructor(configDir: string) {
     const rawMode = (process.env.RESPONSE_MODE || 'all').toLowerCase();
     this.defaultMode = isResponseMode(rawMode) ? rawMode : 'all';
 
@@ -35,7 +35,7 @@ export class ResponseFilter {
     }
     this.keywords = explicit.map(k => k.toLowerCase());
 
-    this.overridesPath = path.join(workspaceDir, 'response_overrides.json');
+    this.overridesPath = path.join(configDir, 'response.json');
     this.load();
 
     logger.log(`[FILTER] Default mode: ${this.defaultMode} | keywords: ${this.keywords.join(',') || '(none)'}`);

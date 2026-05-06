@@ -153,7 +153,7 @@ ENABLE_SCHEDULE_TOOLS=0
 | `RESPONSE_MODE` | `all`（既定: 全メッセージ） / `mention`（@メンション・リプライのみ） / `keyword`（メンション or キーワード一致） |
 | `RESPONSE_KEYWORDS` | カンマ区切り、大文字小文字無視の部分一致。空の場合は `AGENT_NAME` を使用 |
 
-`/response` スラッシュコマンドでチャンネルごとに上書きでき、`workspace/response_overrides.json` に保存されます。`mention` / `keyword` モードでも、自分への @メンションやリプライには常に反応します。
+`/response` スラッシュコマンドでチャンネルごとに上書きでき、`.kaede/<agent>/response.json` に保存されます。`mention` / `keyword` モードでも、自分への @メンションやリプライには常に反応します。
 
 ---
 
@@ -527,7 +527,7 @@ AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセー
 | `list_schedules` | 📋 登録済みスケジュールの一覧表示 |
 | `remove_schedule` | 🗑️ スケジュールの削除 |
 
-自然言語で「毎朝9時にニュースをまとめて」と伝えると、AI がcron式に変換してスケジュール登録します。スケジュールは `workspace/schedules.json` に永続化され、再起動後も自動復元されます。
+自然言語で「毎朝9時にニュースをまとめて」と伝えると、AI がcron式に変換してスケジュール登録します。スケジュールは `.kaede/<agent>/schedules.json` に永続化され、再起動後も自動復元されます。
 
 ### 関数管理ツール
 
