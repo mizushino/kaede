@@ -178,11 +178,19 @@ export abstract class Bot {
 
   protected async clearAgent(channelId: string, guildId?: string): Promise<Agent | undefined> {
     const sessionKey = this.resolveSessionKey(channelId, guildId);
-    const agent = this.sessions.get(sessionKey);
+    let agent = this.sessions.get(sessionKey);
     if (agent) {
       await agent.dispose();
       await agent.deleteSession();
       this.sessions.delete(sessionKey);
+    } else {
+      // If agent is not in memory, we still need to clear its persistent state.
+      // We lazily load the agent class and create a temporary instance to call deleteSession.
+      await this.loadAgentClass();
+      const messenger = this.createMessenger(channelId);
+      agent = this.createAgent(messenger, sessionKey);
+      await agent.deleteSession();
+      await agent.dispose();
     }
     return agent;
   }
