@@ -106,11 +106,11 @@ Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemi
 
 | `AGENT_PROVIDER` | 実行方式 | 主なモデル環境変数 |
 |------------------|----------|--------------------|
-| `copilot`（デフォルト） | GitHub Copilot SDK | `AGENT_MODEL` |
-| `claude` | Claude Agent SDK (`claude`) | `AGENT_MODEL` |
-| `codex` | OpenAI Codex SDK (`codex`) | `AGENT_MODEL` |
-| `gemini` | Gemini CLI (`gemini --acp`) | `AGENT_MODEL` |
-| `acp` | 任意の ACP CLI（`ACP_COMMAND` で指定） | `AGENT_MODEL` |
+| `copilot`（デフォルト） | GitHub Copilot SDK |
+| `claude` | Claude Agent SDK (`claude`) |
+| `codex` | OpenAI Codex SDK (`codex`) |
+| `gemini` | Gemini CLI (`gemini`) |
+| `acp` | 任意の ACP CLI（`ACP_COMMAND` で指定） |
 
 ### 切り替え方法
 
