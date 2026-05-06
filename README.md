@@ -49,22 +49,22 @@ npm install
 
 #### Copilot を使用する場合
 ```sh
-cp .env.example.copilot .env
+cp ./examples/.env.example.copilot .env
 ```
 
 #### Claude を使用する場合
 ```sh
-cp .env.example.claude .env
+cp ./examples/.env.example.claude .env
 ```
 
 #### Codex を使用する場合
 ```sh
-cp .env.example.codex .env
+cp ./examples/.env.example.codex .env
 ```
 
 #### Gemini を使用する場合
 ```sh
-cp .env.example.gemini .env
+cp ./examples/.env.example.gemini .env
 ```
 
 ### 5. AI Provider の認証設定
