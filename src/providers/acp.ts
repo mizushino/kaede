@@ -7,8 +7,9 @@ import { BaseProvider, asJsonObject, normalizeToolName } from './provider.js';
 import type { ContextUsageInfo, JsonObject, ProviderOptions } from './provider.js';
 import { logger } from '../core/logger.js';
 import { loadPermissionConfig, type PermissionConfig, type PermissionKind } from '../core/permissions.js';
+import { getConfiguredTemporaryDir } from '../core/temporary_dir.js';
 
-const DEFAULT_TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
+const DEFAULT_TEMPORARY_DIR = path.resolve(getConfiguredTemporaryDir());
 
 export type SessionOpenResponse = acp.NewSessionResponse | acp.LoadSessionResponse;
 
@@ -134,7 +135,7 @@ function buildDiscordMcpServer(sessionKey: string): acp.McpServerStdio {
   const agent = process.env.AGENT || process.env.AGENT_NAME || '';
   const env: acp.EnvVariable[] = [
     { name: 'KAEDE_SESSION_KEY', value: sessionKey },
-    { name: 'TEMPORARY_DIR', value: process.env.TEMPORARY_DIR || 'tmp' },
+    { name: 'TEMPORARY_DIR', value: getConfiguredTemporaryDir() },
   ];
   if (agent) env.push({ name: 'AGENT', value: agent });
   if (process.env.PATH) env.push({ name: 'PATH', value: process.env.PATH });

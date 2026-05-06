@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { writeFile } from 'fs/promises';
 import { logger } from './logger.js';
+import { getConfiguredTemporaryDir } from './temporary_dir.js';
 
 export type SessionScope = 'channel' | 'server';
 export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex', 'gemini', 'acp'] as const;
@@ -48,7 +49,7 @@ export abstract class Bot {
 
   constructor() {
     this.workspaceDir = process.env.WORKSPACE_DIR || 'workspace';
-    this.temporaryDir = process.env.TEMPORARY_DIR || 'tmp';
+    this.temporaryDir = getConfiguredTemporaryDir();
     this.functionsDir = process.env.FUNCTIONS_DIR || path.join(this.workspaceDir, 'functions');
     this.agentName = process.env.AGENT_NAME || 'agent';
     this.configDir = path.resolve(process.env.CONFIG_DIR || path.join('.kaede', this.agentName));

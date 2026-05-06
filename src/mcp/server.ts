@@ -11,13 +11,14 @@ import { getDiscordToolContracts } from '../core/tool_contract.js';
 import { isDiscordToolEnabled } from '../core/tool_features.js';
 import { enqueueDeferredReply, readPendingQueueSnapshot } from '../core/queue_state.js';
 import { logger } from '../core/logger.js';
+import { getConfiguredTemporaryDir } from '../core/temporary_dir.js';
 
 const WORKSPACE_DIR = path.resolve(process.env.WORKSPACE_DIR || 'workspace');
 const FUNCTIONS_DIR = path.resolve(process.env.FUNCTIONS_DIR || path.join(WORKSPACE_DIR, 'functions'));
 const AGENT_NAME = process.env.AGENT_NAME || 'agent';
 const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || path.join('.kaede', AGENT_NAME));
 const SCHEDULES_PATH = path.join(CONFIG_DIR, 'schedules.json');
-const TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
+const TEMPORARY_DIR = path.resolve(getConfiguredTemporaryDir());
 const MCP_SESSION_KEY = process.env.KAEDE_SESSION_KEY || '';
 
 const SendMessageSchema = z.object({

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { getConfiguredTemporaryDir } from './temporary_dir.js';
 
 export type PendingQueueMessage = {
   id: string;
@@ -42,7 +43,7 @@ export function buildDeferredReplyMarker(reply: {
   ].join('\n');
 }
 
-const DEFAULT_TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
+const DEFAULT_TEMPORARY_DIR = path.resolve(getConfiguredTemporaryDir());
 const SNAPSHOT_DIRNAME = 'pending-queues';
 const DEFERRED_REPLY_DIRNAME = 'deferred-replies';
 

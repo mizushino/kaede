@@ -19,8 +19,9 @@ import {
 import { BaseProvider, asJsonObject } from './provider.js';
 import type { JsonObject, ProviderContext, ProviderOptions, ReasoningEffort } from './provider.js';
 import { logger } from '../core/logger.js';
+import { getConfiguredTemporaryDir } from '../core/temporary_dir.js';
 
-const DEFAULT_TEMPORARY_DIR = path.resolve(process.env.TEMPORARY_DIR || 'tmp');
+const DEFAULT_TEMPORARY_DIR = path.resolve(getConfiguredTemporaryDir());
 const THREAD_STATE_DIRNAME = 'codex-threads';
 
 function parsePositiveIntegerEnv(name: string): number | undefined {
@@ -265,7 +266,7 @@ export class CodexCodeProvider extends BaseProvider {
     const repoRoot = path.resolve(process.cwd());
     const mcpEnv: Record<string, string> = {
       KAEDE_SESSION_KEY: this.context.sessionKey,
-      TEMPORARY_DIR: process.env.TEMPORARY_DIR || 'tmp',
+      TEMPORARY_DIR: getConfiguredTemporaryDir(),
     };
     if (agent) mcpEnv.AGENT = agent;
     if (process.env.PATH) mcpEnv.PATH = process.env.PATH;

@@ -8,6 +8,7 @@ import type { ContextUsageInfo, ElicitationSchema, ProviderOptions } from './pro
 import { logger } from '../core/logger.js';
 import { PromptQueue } from '../core/prompt_queue.js';
 import { getClaudeDiscordAllowedTools } from '../core/tool_contract.js';
+import { getConfiguredTemporaryDir } from '../core/temporary_dir.js';
 
 const require_ = createRequire(import.meta.url);
 
@@ -630,7 +631,7 @@ export class ClaudeCodeProvider extends BaseProvider {
         env: {
           ...(agent ? { AGENT: agent } : {}),
           KAEDE_SESSION_KEY: this.context.sessionKey,
-          TEMPORARY_DIR: process.env.TEMPORARY_DIR || 'tmp',
+          TEMPORARY_DIR: getConfiguredTemporaryDir(),
         },
         alwaysLoad: true,
       },

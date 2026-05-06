@@ -124,7 +124,7 @@ AGENT_PROVIDER=claude AGENT_MODEL=sonnet npm start
 
 #### マルチエージェント（`.env.<name>` の読み込み）
 
-`AGENT` 環境変数で `.env.<name>` を読み込めます。エージェントごとに `WORKSPACE_DIR` を分けることでプラグインやファイルを隔離できます。
+`AGENT` 環境変数で `.env.<name>` を読み込めます。エージェントごとに `WORKSPACE_DIR` を分けることでプラグインやファイルを隔離できます。`TEMPORARY_DIR` を省略した場合は `.kaede/<AGENT_NAME>/tmp/` を使います。
 
 ```bash
 AGENT=kaede npm start   # .env.kaede を読み込んで起動
