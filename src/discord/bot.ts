@@ -2,6 +2,7 @@ import {
   Client,
   GatewayIntentBits,
   Message,
+  MessageFlags,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -240,12 +241,14 @@ export class DiscordBot extends Bot {
 
   private async handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     if (interaction.commandName === 'clear') {
+      await interaction.deferReply();
       await this.clearAgent(interaction.channelId, interaction.guildId ?? undefined);
-      await interaction.reply('🔄 Session cleared');
+      await interaction.editReply('🔄 Session cleared');
       return;
     }
 
     if (interaction.commandName === 'response') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const sub = interaction.options.getSubcommand();
       const channelId = interaction.channelId;
       if (sub === 'status') {
@@ -257,35 +260,34 @@ export class DiscordBot extends Bot {
         const overrideLine = override
           ? `Override: \`${override}\``
           : `Override: (none — using default)`;
-        await interaction.reply({
+        await interaction.editReply({
           content: `🎛️ **Response settings**\nEffective mode: \`${effective}\`\n${overrideLine}\nDefault: \`${def}\`${kwLine}`,
-          ephemeral: true,
         });
       } else if (sub === 'set') {
         const mode = interaction.options.getString('mode', true);
         if (!isResponseMode(mode)) {
-          await interaction.reply({ content: `❌ Invalid mode: \`${mode}\``, ephemeral: true });
+          await interaction.editReply({ content: `❌ Invalid mode: \`${mode}\`` });
           return;
         }
         this.responseFilter.setOverride(channelId, mode as ResponseMode);
         const warning = (mode === 'keyword' && this.responseFilter.getKeywords().length === 0)
           ? '\n⚠️ Keywords are not configured (`RESPONSE_KEYWORDS` and `AGENT_NAME` are both empty). Non-mention messages will be ignored.'
           : '';
-        await interaction.reply({ content: `✅ Channel response mode set to \`${mode}\`${warning}`, ephemeral: true });
+        await interaction.editReply({ content: `✅ Channel response mode set to \`${mode}\`${warning}` });
       } else if (sub === 'reset') {
         const removed = this.responseFilter.clearOverride(channelId);
         const def = this.responseFilter.getDefaultMode();
-        await interaction.reply({
+        await interaction.editReply({
           content: removed
             ? `✅ Override removed. Falling back to default \`${def}\`.`
             : `ℹ️ No override was set. Default is \`${def}\`.`,
-          ephemeral: true,
         });
       }
       return;
     }
 
     if (interaction.commandName === 'stats') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const days = interaction.options.getInteger('days') ?? 7;
       // Daily stats (last N days)
       const daily = this.counter.getDailyStats(days);
@@ -315,28 +317,27 @@ export class DiscordBot extends Bot {
         .map(([m, c]) => `${m}(${c})`)
         .join(' ') || 'none';
 
-      await interaction.reply({
+      await interaction.editReply({
         content:
           `📊 **Request Statistics**\n\n` +
           `📆 **Last ${days} Day${days === 1 ? '' : 's'}** (↓recv ↑sent)\n${dailyLines}\n\n` +
           `📋 **${days}-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
-        ephemeral: true,
       });
       return;
     }
 
     if (interaction.commandName === 'context') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const sessionKey = this.resolveSessionKey(interaction.channelId, interaction.guildId ?? undefined);
       const agent = this.sessions.get(sessionKey);
       if (!agent) {
-        await interaction.reply({ content: '🧠 No active session yet. Send a message first.', ephemeral: true });
+        await interaction.editReply({ content: '🧠 No active session yet. Send a message first.' });
         return;
       }
       const usage = await agent.getContextUsage();
       if (!usage) {
-        await interaction.reply({
+        await interaction.editReply({
           content: '🧠 Context usage is unavailable yet. Send a message first to start a session.',
-          ephemeral: true,
         });
         return;
       }
@@ -353,24 +354,24 @@ export class DiscordBot extends Bot {
         .map(c => `  • ${c.name}: ${fmt(c.tokens)}`)
         .join('\n') || '  (no breakdown)';
       const modelLine = usage.model ? `\n🤖 Model: \`${usage.model}\`` : '';
-      await interaction.reply({
+      await interaction.editReply({
         content:
           `🧠 **Context Usage**\n` +
           `\`${bar}\` ${pct}%\n` +
           `Used: **${fmt(usage.totalTokens)}** / ${fmt(usage.maxTokens)} tokens (remaining: ${fmt(remaining)})${modelLine}\n\n` +
           `**Breakdown**\n${topCategories}`,
-        ephemeral: true,
       });
       return;
     }
 
     if (interaction.commandName === 'restart') {
+      await interaction.deferReply();
       const envName = interaction.options.getString('env')?.trim() ?? '';
 
       if (!envName) {
         // Simple restart with current env
         this.counter.flush();
-        await interaction.reply('🔄 Restarting...');
+        await interaction.editReply('🔄 Restarting...');
         logger.log('[BOT] Restart requested via slash command');
         setTimeout(() => process.exit(0), 1000);
         return;
@@ -383,7 +384,7 @@ export class DiscordBot extends Bot {
       // multiple bots share the same package.
       const pm2Target = process.env.pm_id?.trim();
       if (!pm2Target || !/^\d+$/.test(pm2Target)) {
-        await interaction.reply({ content: '❌ Not running under PM2 (no `pm_id`); cannot switch env.', ephemeral: true });
+        await interaction.editReply({ content: '❌ Not running under PM2 (no `pm_id`); cannot switch env.' });
         return;
       }
       // Best-effort label resolution from the PM2 error log path
@@ -396,14 +397,14 @@ export class DiscordBot extends Bot {
       let label = 'default `.env`';
       if (envName !== 'default') {
         if (!SAFE_NAME.test(envName)) {
-          await interaction.reply({ content: `❌ Invalid env name: \`${envName}\``, ephemeral: true });
+          await interaction.editReply({ content: `❌ Invalid env name: \`${envName}\`` });
           return;
         }
         const targetFile = `.env.${envName}`;
         const projectRoot = path.resolve(this.workspaceDir, '..');
         const { existsSync } = await import('fs');
         if (!existsSync(path.join(projectRoot, targetFile))) {
-          await interaction.reply({ content: `❌ \`${targetFile}\` not found`, ephemeral: true });
+          await interaction.editReply({ content: `❌ \`${targetFile}\` not found` });
           return;
         }
         agentValue = envName;
@@ -411,7 +412,7 @@ export class DiscordBot extends Bot {
       }
 
       this.counter.flush();
-      await interaction.reply(`🔄 Restarting \`${pm2AppLabel}\` with ${label}...`);
+      await interaction.editReply(`🔄 Restarting \`${pm2AppLabel}\` with ${label}...`);
       try {
         // Only restart this app and refresh its env so other PM2 apps stay
         // untouched. `npm start` reads AGENT and loads .env.<AGENT>.
@@ -429,24 +430,27 @@ export class DiscordBot extends Bot {
       const sub = interaction.options.getSubcommand();
 
       if (sub === 'list') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await interaction.editReply(await this.buildModelListReply());
       } else if (sub === 'get') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
-        await interaction.reply({ content: `Current model: \`${agent.model}\`${current}`, ephemeral: true });
+        await interaction.editReply({ content: `Current model: \`${agent.model}\`${current}` });
       } else if (sub === 'set') {
+        await interaction.deferReply();
         const modelId = interaction.options.getString('model_id', true);
         const effort = (interaction.options.getString('effort') ?? '') as 'low' | 'medium' | 'high' | 'xhigh' | '';
         const agent = await this.getOrCreateAgent(interaction.channelId, interaction.guildId ?? undefined);
         await agent.setModel(modelId, effort);
         const effortNote = effort ? ` / reasoning: \`${effort}\`` : '';
-        await interaction.reply(`✅ Switched model to \`${modelId}\`${effortNote}`);
+        await interaction.editReply(`✅ Switched model to \`${modelId}\`${effortNote}`);
       }
       return;
     }
 
     if (interaction.commandName === 'schedule') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const sub = interaction.options.getSubcommand();
 
       if (sub === 'add') {
@@ -463,68 +467,69 @@ export class DiscordBot extends Bot {
             prompt: promptText,
             description,
           });
-          await interaction.reply({ content: `✅ Schedule added: \`${entry.id}\`\nCron: \`${entry.cron}\` → <#${entry.channelId}>\nPrompt: ${entry.prompt.slice(0, 100)}`, ephemeral: true });
+          await interaction.editReply({ content: `✅ Schedule added: \`${entry.id}\`\nCron: \`${entry.cron}\` → <#${entry.channelId}>\nPrompt: ${entry.prompt.slice(0, 100)}` });
         } catch (err) {
-          await interaction.reply({ content: `❌ ${(err as Error).message}`, ephemeral: true });
+          await interaction.editReply({ content: `❌ ${(err as Error).message}` });
         }
       } else if (sub === 'list') {
         const entries = this.scheduler.list();
         if (entries.length === 0) {
-          await interaction.reply({ content: '📋 No scheduled tasks', ephemeral: true });
+          await interaction.editReply({ content: '📋 No scheduled tasks' });
         } else {
           const lines = entries.map(e =>
             `${e.enabled ? '✅' : '⏸️'} \`${e.id}\` — \`${e.cron}\` → <#${e.channelId}>\n　${e.description || e.prompt.slice(0, 60)}`
           );
-          await interaction.reply({ content: `📋 **Scheduled Tasks (${entries.length})**\n\n${lines.join('\n')}`, ephemeral: true });
+          await interaction.editReply({ content: `📋 **Scheduled Tasks (${entries.length})**\n\n${lines.join('\n')}` });
         }
       } else if (sub === 'remove') {
         const id = interaction.options.getString('id', true);
         const removed = this.scheduler.remove(id);
-        await interaction.reply({ content: removed ? `✅ Removed schedule \`${id}\`` : `❌ Schedule \`${id}\` not found`, ephemeral: true });
+        await interaction.editReply({ content: removed ? `✅ Removed schedule \`${id}\`` : `❌ Schedule \`${id}\` not found` });
       }
       return;
     }
 
     if (interaction.commandName === 'function') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const sub = interaction.options.getSubcommand();
 
       if (sub === 'list') {
         const files = await this.listFunctionFiles();
         if (files.length === 0) {
-          await interaction.reply({ content: '📦 **Functions**\n\nNo functions installed.', ephemeral: true });
+          await interaction.editReply({ content: '📦 **Functions**\n\nNo functions installed.' });
         } else {
           const lines = files.map(f =>
             `\`${f.file}\` — **${f.name || 'unnamed'}**\n　${f.description || '(no description)'}`
           );
-          await interaction.reply({ content: `📦 **Functions (${files.length})**\n\n${lines.join('\n')}`, ephemeral: true });
+          await interaction.editReply({ content: `📦 **Functions (${files.length})**\n\n${lines.join('\n')}` });
         }
       } else if (sub === 'info') {
         const name = interaction.options.getString('name', true);
         const filename = await this.resolveFunctionFile(name);
         if (!filename) {
-          await interaction.reply({ content: `❌ Function \`${name}\` not found`, ephemeral: true });
+          await interaction.editReply({ content: `❌ Function \`${name}\` not found` });
         } else {
           try {
             const { readFile } = await import('fs/promises');
             const content = await readFile(path.join(this.functionsDir, filename), 'utf-8');
             const truncated = content.length > 1800 ? content.slice(0, 1800) + '\n... (truncated)' : content;
-            await interaction.reply({ content: `📄 **${filename}**\n\`\`\`ts\n${truncated}\n\`\`\``, ephemeral: true });
+            await interaction.editReply({ content: `📄 **${filename}**\n\`\`\`ts\n${truncated}\n\`\`\`` });
           } catch {
-            await interaction.reply({ content: `❌ Function \`${name}\` not found`, ephemeral: true });
+            await interaction.editReply({ content: `❌ Function \`${name}\` not found` });
           }
         }
       } else if (sub === 'delete') {
         const name = interaction.options.getString('name', true);
         const filename = await this.resolveFunctionFile(name);
         if (!filename) {
-          await interaction.reply({ content: `❌ Function \`${name}\` not found`, ephemeral: true });
+          await interaction.editReply({ content: `❌ Function \`${name}\` not found` });
         } else {
           try {
             const { unlink } = await import('fs/promises');
             await unlink(path.join(this.functionsDir, filename));
-            await interaction.reply({ content: `✅ Deleted function \`${filename}\``, ephemeral: true });
+            await interaction.editReply({ content: `✅ Deleted function \`${filename}\`` });
           } catch {
-            await interaction.reply({ content: `❌ Failed to delete \`${filename}\``, ephemeral: true });
+            await interaction.editReply({ content: `❌ Failed to delete \`${filename}\`` });
           }
         }
       }
