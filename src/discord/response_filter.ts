@@ -29,10 +29,6 @@ export class ResponseFilter {
       .split(',')
       .map(s => s.trim())
       .filter(s => s.length > 0);
-    if (explicit.length === 0) {
-      const agentName = (process.env.AGENT_NAME || '').trim();
-      if (agentName) explicit.push(agentName);
-    }
     this.keywords = explicit.map(k => k.toLowerCase());
 
     this.overridesPath = path.join(configDir, 'response.json');
@@ -40,7 +36,7 @@ export class ResponseFilter {
 
     logger.log(`[FILTER] Default mode: ${this.defaultMode} | keywords: ${this.keywords.join(',') || '(none)'}`);
     if (this.keywords.length === 0 && this.usesKeywordMode()) {
-      logger.error('[FILTER] WARNING: keyword mode is configured but no RESPONSE_KEYWORDS / AGENT_NAME provided. Non-mention messages will be ignored.');
+      logger.error('[FILTER] WARNING: keyword mode is configured but no RESPONSE_KEYWORDS provided. Non-mention messages will be ignored.');
     }
   }
 

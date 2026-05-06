@@ -151,7 +151,7 @@ ENABLE_SCHEDULE_TOOLS=0
 | 環境変数 | 説明 |
 |----------|------|
 | `RESPONSE_MODE` | `all`（既定: 全メッセージ） / `mention`（@メンション・リプライのみ） / `keyword`（メンション or キーワード一致） |
-| `RESPONSE_KEYWORDS` | カンマ区切り、大文字小文字無視の部分一致。空の場合は `AGENT_NAME` を使用 |
+| `RESPONSE_KEYWORDS` | カンマ区切り、大文字小文字無視の部分一致。`keyword` モードで使うキーワード |
 
 `/response` スラッシュコマンドでチャンネルごとに上書きでき、`.kaede/<agent>/response.json` に保存されます。`mention` / `keyword` モードでも、自分への @メンションやリプライには常に反応します。
 

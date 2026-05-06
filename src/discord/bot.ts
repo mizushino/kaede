@@ -79,7 +79,7 @@ export class DiscordBot extends Bot {
                 .addChoices(
                   { name: 'all (respond to every message)', value: 'all' },
                   { name: 'mention (only @ or reply)', value: 'mention' },
-                  { name: 'keyword (mention or name keyword)', value: 'keyword' },
+                  { name: 'keyword (mention or keyword)', value: 'keyword' },
                 )))
         .addSubcommand(sub =>
           sub.setName('reset').setDescription('Remove channel override (use default)')),
@@ -271,7 +271,7 @@ export class DiscordBot extends Bot {
         }
         this.responseFilter.setOverride(channelId, mode as ResponseMode);
         const warning = (mode === 'keyword' && this.responseFilter.getKeywords().length === 0)
-          ? '\n⚠️ Keywords are not configured (`RESPONSE_KEYWORDS` and `AGENT_NAME` are both empty). Non-mention messages will be ignored.'
+          ? '\n⚠️ Keywords are not configured (`RESPONSE_KEYWORDS` is empty). Non-mention messages will be ignored.'
           : '';
         await interaction.editReply({ content: `✅ Channel response mode set to \`${mode}\`${warning}` });
       } else if (sub === 'reset') {
