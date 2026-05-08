@@ -376,11 +376,81 @@ pm2 logs kaede
 
 マルチエージェント構成の場合は、`ecosystem.config.cjs` に複数のアプリ定義を追加してください。
 
+## 🎛️ AgentHub（オプション）
+
+AgentHub は、複数の Kaede ボットを一元管理するオプションのコントロールボットです。専用の Discord Bot アプリケーションとして独立して動作し、IPC（Unix Domain Socket）経由で各ボットへコマンドを中継します。
+
+### AgentHub が提供するもの
+
+- 各ボットへのスラッシュコマンドを1つのアプリに集約（`/clear <target: aoi>`、など）
+- **ALL AGENTS** でオンライン中の全ボットに一括実行
+- `/stop` コマンドによる PM2 プロセスの停止
+
+### セットアップ
+
+**1. Discord アプリケーションの作成**
+
+[Discord Developer Portal](https://discord.com/developers/applications) で AgentHub 専用の **新しいアプリケーション**を作成し、Bot トークンを取得してください（各エージェントとは別のアプリが必要です）。
+
+**2. 環境変数の設定**
+
+```sh
+cp ./examples/.env.example.agenthub .env.agenthub
+# .env.agenthub に DISCORD_BOT_TOKEN を設定
+```
+
+**3. 起動**
+
+```sh
+npm run agenthub
+```
+
+PM2 で管理する場合は `ecosystem.config.cjs` に以下のエントリを追加してください:
+
+```js
+{
+  name: "agenthub",
+  script: "npm",
+  args: "run agenthub",
+  interpreter: "none",
+  env: { NODE_ENV: "development", AGENT: "agenthub" }
+}
+```
+
+### AgentHub のスラッシュコマンド
+
+すべてのコマンドに `target` オプションが付き、対象ボットを指定します。`ALL AGENTS` を選択すると全ボットに一括実行されます。
+
+| コマンド | 説明 | ALL AGENTS 対応 |
+|----------|------|----------------|
+| `/clear <target>` | セッションのリセット | ─ |
+| `/restart <target>` | ボットプロセスを再起動 | ✅ |
+| `/stop <target>` | ボットプロセスを停止 | ✅ |
+| `/response set <target> <mode>` | 応答モードを変更 | ✅ |
+| `/response reset <target>` | 応答モードを解除 | ✅ |
+| `/response status <target>` | 応答モードを確認 | ─ |
+| `/stats <target>` | リクエスト統計を表示 | ─ |
+| `/context <target>` | コンテキスト使用量を表示 | ─ |
+| `/model get/list/set <target>` | モデルの確認・切り替え | ─ |
+| `/<prompt> <target>` | カスタムプロンプトを実行 | ─ |
+
+### 各ボットのスラッシュコマンド無効化
+
+AgentHub を使用する場合、各ボット自身のスラッシュコマンド登録が不要なら `ENABLE_SLASH_COMMAND=0` で無効化できます。
+
+```sh
+# .env.aoi など各ボットの env に追加
+ENABLE_SLASH_COMMAND=0
+```
+
+---
+
 ## 📁 プロジェクト構成
 
 ```
 src/
 ├── index.ts              # エントリーポイント（起動・グレースフルシャットダウン）
+├── agent_hub.ts          # AgentHub エントリーポイント
 ├── core/
 │   ├── bot.ts            # Bot 基底クラス（チャンネル/サーバーごとの Agent 管理・provider 切替）
 │   ├── client.ts         # Copilot クライアント管理（遅延初期化・再接続）
@@ -392,6 +462,7 @@ src/
 │   ├── scheduler.ts      # cronスケジューラー（定期タスク管理・JSON永続化）
 │   ├── counter.ts        # リクエスト回数カウンター（永続化）
 │   ├── queue_state.ts    # 保留メッセージ・未送信返信のスナップショット永続化
+│   ├── ipc.ts            # AgentHub ↔ ボット間 IPC（Unix Domain Socket）
 │   ├── tool_contract.ts  # Discord MCP ツール名の共有定義
 │   ├── tools.ts          # Copilot SDK 向けコアツール定義
 │   ├── status.ts         # ステータスアイコンマップ（ツール名 → 絵文字）
@@ -414,6 +485,7 @@ src/
 │   └── acp_generic_agent.ts # 汎用 ACP Agent ラッパー
 ├── discord/
 │   ├── bot.ts            # Discord Bot 実装（イベントハンドリング・画像DL）
+│   ├── agent_hub_bot.ts  # AgentHub Bot 実装（IPC中継・スラッシュコマンド集約）
 │   └── messenger.ts      # Discord Messenger 実装（リアクション承認・ステータス）
 └── mcp/
     └── server.ts         # Discord 操作用 stdio MCP サーバー（Claude / Codex / Gemini provider が利用）
