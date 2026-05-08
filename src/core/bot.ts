@@ -64,6 +64,34 @@ export abstract class Bot {
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
     fs.mkdirSync(this.configDir, { recursive: true });
+    
+    // Setup IPC watcher for remote clear commands
+    const ipcDir = path.join(this.configDir, 'ipc');
+    fs.mkdirSync(ipcDir, { recursive: true });
+    fs.watch(ipcDir, (eventType, filename) => {
+      if (filename && filename.startsWith('clear_')) {
+        const sessionKey = filename.replace('clear_', '');
+        logger.log(`[BOT] Received IPC clear signal for session: ${sessionKey}`);
+        const agent = this.sessions.get(sessionKey);
+        if (agent) {
+          agent.dispose().then(() => agent.deleteSession()).catch(err => logger.error('[BOT] IPC clear error:', err));
+          this.sessions.delete(sessionKey);
+        } else {
+          // If agent is not in memory, we still need to clear persistent state.
+          this.loadAgentClass()
+            .then(() => {
+              // Hacky way to call deleteSession when channel is unknown (just use sessionKey as channel)
+              const [channelId] = sessionKey.split(':');
+              const messenger = this.createMessenger(channelId);
+              const tempAgent = this.createAgent(messenger, sessionKey);
+              return tempAgent.deleteSession().then(() => tempAgent.dispose());
+            })
+            .catch(err => logger.error('[BOT] IPC persistent clear error:', err));
+        }
+        fs.unlink(path.join(ipcDir, filename), () => {});
+      }
+    });
+
     logger.log(`[BOT] Agent name: ${this.agentName}`);
     logger.log(`[BOT] Provider: ${this.providerType}`);
     logger.log(`[BOT] Config dir: ${this.configDir}`);

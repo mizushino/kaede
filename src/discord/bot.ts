@@ -55,6 +55,11 @@ export class DiscordBot extends Bot {
   }
 
   private async registerSlashCommands(): Promise<void> {
+    if (process.env.REGISTER_SLASH_COMMANDS === 'false') {
+      logger.log('[BOT] Skipping slash command registration (REGISTER_SLASH_COMMANDS=false)');
+      return;
+    }
+    
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token || !this.discord.user) return;
 
