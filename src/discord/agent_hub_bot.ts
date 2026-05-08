@@ -290,7 +290,7 @@ export class AgentHubBot {
 
     this.discord.once('clientReady', async () => {
       logger.log(`[AGENT HUB] Ready as ${this.discord.user?.tag}`);
-      this.discord.user?.setPresence({ status: 'online', activities: [{ name: 'Orchestrating' }] });
+      this.discord.user?.setPresence({ status: 'online', activities: [{ name: 'Managing agents' }] });
       await this.registerSlashCommands();
     });
 
