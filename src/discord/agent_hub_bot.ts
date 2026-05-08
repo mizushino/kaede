@@ -18,7 +18,7 @@ import { areFunctionManagementToolsEnabled, areScheduleManagementToolsEnabled } 
 
 const ENV_SWITCH_IGNORE_PREFIXES = ['example', 'defaults'];
 
-export class OrchestratorBot {
+export class AgentHubBot {
   readonly discord: Client;
   private readonly workspaceDir: string;
   private readonly ipcClient: IpcClient;
@@ -26,7 +26,7 @@ export class OrchestratorBot {
 
   constructor() {
     this.workspaceDir = process.env.WORKSPACE_DIR || 'workspace';
-    const configDir = path.resolve('.kaede', process.env.AGENT?.trim() || 'orchestrator');
+    const configDir = path.resolve('.kaede', process.env.AGENT?.trim() || 'agenthub');
     fs.mkdirSync(configDir, { recursive: true });
     this.ipcClient = new IpcClient();
     this.promptLoader = new PromptLoader(process.env.PROMPTS_DIR);
@@ -39,7 +39,7 @@ export class OrchestratorBot {
 
   private filterTarget(name: string, focused: string): boolean {
     return name.toLowerCase().includes(focused) &&
-      name !== 'orchestrator' &&
+      name !== 'agenthub' &&
       !ENV_SWITCH_IGNORE_PREFIXES.some(p => name.startsWith(p));
   }
 
@@ -164,11 +164,11 @@ export class OrchestratorBot {
     const rest = new REST().setToken(token);
     try {
       const commandsJSON = commands.map(cmd => cmd.toJSON());
-      logger.log(`[ORCHESTRATOR] Registering ${commands.length} slash commands...`);
+      logger.log(`[AGENT HUB] Registering ${commands.length} slash commands...`);
       await rest.put(Routes.applicationCommands(this.discord.user.id), { body: commandsJSON });
-      logger.log(`[ORCHESTRATOR] Successfully registered commands.`);
+      logger.log(`[AGENT HUB] Successfully registered commands.`);
     } catch (err) {
-      logger.error('[ORCHESTRATOR] Failed to register commands:', err);
+      logger.error('[AGENT HUB] Failed to register commands:', err);
     }
   }
 
@@ -219,7 +219,7 @@ export class OrchestratorBot {
           }
           await interaction.editReply(`${emoji} ${pm2Command === 'restart' ? 'Restarting' : 'Stopped'} PM2 process \`${pm2Target}\`...`);
         } catch (err) {
-          logger.error(`[ORCHESTRATOR] Failed to ${pm2Command}:`, err);
+          logger.error(`[AGENT HUB] Failed to ${pm2Command}:`, err);
           await interaction.editReply(`❌ Failed to ${pm2Command} \`${pm2Target}\`. Is it running under PM2?`);
         }
       }
@@ -284,12 +284,12 @@ export class OrchestratorBot {
   async start(): Promise<void> {
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token) {
-      logger.error('[ORCHESTRATOR] No token found in environment');
+      logger.error('[AGENT HUB] No token found in environment');
       process.exit(1);
     }
 
     this.discord.once('clientReady', async () => {
-      logger.log(`[ORCHESTRATOR] Ready as ${this.discord.user?.tag}`);
+      logger.log(`[AGENT HUB] Ready as ${this.discord.user?.tag}`);
       this.discord.user?.setPresence({ status: 'online', activities: [{ name: 'Orchestrating' }] });
       await this.registerSlashCommands();
     });
@@ -306,7 +306,7 @@ export class OrchestratorBot {
     try {
       await this.discord.login(token);
     } catch (error) {
-      logger.error('[ORCHESTRATOR] Failed to connect:', error);
+      logger.error('[AGENT HUB] Failed to connect:', error);
       process.exit(1);
     }
   }
@@ -317,9 +317,9 @@ export class OrchestratorBot {
       try {
         const rest = new REST().setToken(token);
         await rest.put(Routes.applicationCommands(this.discord.user.id), { body: [] });
-        logger.log('[ORCHESTRATOR] Cleared all slash commands');
+        logger.log('[AGENT HUB] Cleared all slash commands');
       } catch (err) {
-        logger.error('[ORCHESTRATOR] Failed to clear slash commands:', err);
+        logger.error('[AGENT HUB] Failed to clear slash commands:', err);
       }
     }
     this.discord.destroy();

@@ -64,7 +64,7 @@ export abstract class Bot {
       path.join(this.configDir, 'schedules.json'),
       (entry) => this.onScheduleFire(entry),
     );
-    // Use AGENT (PM2 process name) for the IPC socket dir so the orchestrator
+    // Use AGENT (PM2 process name) for the IPC socket dir so AgentHub
     // can reliably locate the socket even when AGENT_NAME differs.
     const ipcDir = path.resolve('.kaede', process.env.AGENT?.trim() || this.agentName);
     this.ipcServer = new IpcServer(ipcDir);
