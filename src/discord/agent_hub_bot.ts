@@ -178,7 +178,7 @@ export class AgentHubBot {
       const allSupportedCommands = ['restart', 'stop'];
       const sub = interaction.options.getSubcommand(false);
       const supportsAll = allSupportedCommands.includes(interaction.commandName) ||
-        (interaction.commandName === 'response' && (sub === 'set' || sub === 'reset'));
+        (interaction.commandName === 'response' && (sub === 'status' || sub === 'set' || sub === 'reset'));
       const targets = await this.getBotTargets(focused.value.toLowerCase(), supportsAll);
       await interaction.respond(targets.slice(0, 25).map(t => ({ name: t === 'all' ? 'ALL AGENTS' : t, value: t })));
     }
@@ -256,8 +256,34 @@ export class AgentHubBot {
     const allTargetCommands = ['response'];
     if (target === 'all' && allTargetCommands.includes(interaction.commandName)) {
       const sub = args.sub as string | undefined;
+      const bots = await this.getRunningBotNames();
+      if (bots.length === 0) {
+        await interaction.editReply({ content: 'ℹ️ 対象ボットが見つかりませんでした。' });
+        return;
+      }
+
+      if (sub === 'status') {
+        const results = await Promise.allSettled(
+          bots.map(async (name) => ({
+            name,
+            response: await this.ipcClient.sendRequest(name, commandName, interaction.channelId, interaction.guildId ?? undefined, args),
+          })),
+        );
+        const lines = results.map((result, index) => {
+          const name = bots[index];
+          if (result.status === 'fulfilled') {
+            if (result.value.response.success) {
+              return `- **${name}**\n${String(result.value.response.data ?? '✅ Success')}`;
+            }
+            return `- **${name}**\n❌ ${result.value.response.error ?? 'Unknown error'}`;
+          }
+          return `- **${name}**\n❌ ${(result.reason as Error).message}`;
+        });
+        await interaction.editReply({ content: `🎛️ **Response settings (ALL AGENTS)**\n\n${lines.join('\n\n')}` });
+        return;
+      }
+
       if (sub === 'set' || sub === 'reset') {
-        const bots = await this.getRunningBotNames();
         const results = await Promise.allSettled(
           bots.map(name => this.ipcClient.sendRequest(name, commandName, interaction.channelId, interaction.guildId ?? undefined, args)),
         );
