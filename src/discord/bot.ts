@@ -55,6 +55,11 @@ export class DiscordBot extends Bot {
   }
 
   private async registerSlashCommands(): Promise<void> {
+    if (process.env.REGISTER_SLASH_COMMANDS === 'false') {
+      logger.log('[BOT] Skipping slash command registration (REGISTER_SLASH_COMMANDS=false)');
+      return;
+    }
+    
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token || !this.discord.user) return;
 
@@ -540,10 +545,10 @@ export class DiscordBot extends Bot {
     const prompt = this.promptLoader.getPrompt(interaction.commandName);
     if (prompt) {
       await interaction.deferReply();
-      
+
       // Get optional arguments
       const args = interaction.options.getString('args') || '';
-      
+
       // Construct the full prompt
       let fullPrompt = prompt.content;
       if (args) {
@@ -621,11 +626,195 @@ export class DiscordBot extends Bot {
     }
   }
 
+  protected override async handleIpcRequest(req: import('../core/ipc.js').IpcRequest): Promise<void> {
+    try {
+      if (req.command === 'response') {
+        const sub = req.args.sub;
+        const channelId = req.channelId;
+        if (sub === 'status') {
+          const effective = this.responseFilter.getEffectiveMode(channelId);
+          const override = this.responseFilter.getOverride(channelId);
+          const def = this.responseFilter.getDefaultMode();
+          const kw = this.responseFilter.getKeywords();
+          const kwLine = kw.length > 0 ? `\nKeywords: \`${kw.join(', ')}\`` : '';
+          const overrideLine = override ? `Override: \`${override}\`` : `Override: (none — using default)`;
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `🎛️ **Response settings**\nEffective mode: \`${effective}\`\n${overrideLine}\nDefault: \`${def}\`${kwLine}` });
+        } else if (sub === 'set') {
+          const mode = req.args.mode;
+          if (!isResponseMode(mode)) {
+            await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: `Invalid mode: \`${mode}\`` });
+            return;
+          }
+          this.responseFilter.setOverride(channelId, mode as ResponseMode);
+          const warning = (mode === 'keyword' && this.responseFilter.getKeywords().length === 0) ? '\n⚠️ Keywords are not configured (`RESPONSE_KEYWORDS` is empty).' : '';
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `✅ Channel response mode set to \`${mode}\`${warning}` });
+        } else if (sub === 'reset') {
+          const removed = this.responseFilter.clearOverride(channelId);
+          const def = this.responseFilter.getDefaultMode();
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: removed ? `✅ Override removed. Falling back to default \`${def}\`.` : `ℹ️ No override was set. Default is \`${def}\`.` });
+        }
+        return;
+      }
+
+      if (req.command === 'stats') {
+        const days = req.args.days ?? 7;
+        const daily = this.counter.getDailyStats(days);
+        const maxDaily = Math.max(...daily.map(d => d.requests), 1);
+        const dailyLines = daily.length > 0 ? daily.map(d => {
+          const bar = '█'.repeat(Math.ceil(d.requests / maxDaily * 12));
+          const modelDetail = Object.entries(d.models).map(([m, c]) => `${m}(${c})`).join(' ');
+          return `  \`${d.date.slice(5)}\` ${bar} ${d.requests} req (↓${d.recv} ↑${d.sent}) [${modelDetail}]`;
+        }).join('\n') : '  (No data)';
+        const totalReq = daily.reduce((s, d) => s + d.requests, 0);
+        const totalRecv = daily.reduce((s, d) => s + d.recv, 0);
+        const totalSent = daily.reduce((s, d) => s + d.sent, 0);
+        const modelTotals: Record<string, number> = {};
+        for (const d of daily) for (const [m, c] of Object.entries(d.models)) modelTotals[m] = (modelTotals[m] || 0) + c;
+        const modelSummary = Object.entries(modelTotals).map(([m, c]) => `${m}(${c})`).join(' ') || 'none';
+        await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `📊 **Request Statistics**\n\n📆 **Last ${days} Day${days === 1 ? '' : 's'}** (↓recv ↑sent)\n${dailyLines}\n\n📋 **${days}-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]` });
+        return;
+      }
+
+      if (req.command === 'context') {
+        const sessionKey = this.resolveSessionKey(req.channelId, req.guildId);
+        const agent = this.sessions.get(sessionKey);
+        if (!agent) {
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: '🧠 No active session yet. Send a message first.' });
+          return;
+        }
+        const usage = await agent.getContextUsage();
+        if (!usage) {
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: '🧠 Context usage is unavailable yet. Send a message first to start a session.' });
+          return;
+        }
+        const fmt = (n: number) => n.toLocaleString('en-US');
+        const pct = usage.percentage.toFixed(1);
+        const remaining = Math.max(0, usage.maxTokens - usage.totalTokens);
+        const barLen = 20;
+        const filled = Math.min(barLen, Math.round((usage.percentage / 100) * barLen));
+        const bar = '█'.repeat(filled) + '░'.repeat(barLen - filled);
+        const topCategories = [...usage.categories].filter(c => c.tokens > 0).sort((a, b) => b.tokens - a.tokens).slice(0, 8).map(c => `  • ${c.name}: ${fmt(c.tokens)}`).join('\n') || '  (no breakdown)';
+        const modelLine = usage.model ? `\n🤖 Model: \`${usage.model}\`` : '';
+        await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `🧠 **Context Usage**\n\`${bar}\` ${pct}%\nUsed: **${fmt(usage.totalTokens)}** / ${fmt(usage.maxTokens)} tokens (remaining: ${fmt(remaining)})${modelLine}\n\n**Breakdown**\n${topCategories}` });
+        return;
+      }
+
+      if (req.command === 'model') {
+        const sub = req.args.sub;
+        if (sub === 'list') {
+          const listStr = await this.buildModelListReply();
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: listStr });
+        } else if (sub === 'get') {
+          const agent = await this.getOrCreateAgent(req.channelId, req.guildId);
+          const current = agent.reasoningEffort ? ` (reasoning: ${agent.reasoningEffort})` : '';
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `Current model: \`${agent.model}\`${current}` });
+        } else if (sub === 'set') {
+          const agent = await this.getOrCreateAgent(req.channelId, req.guildId);
+          await agent.setModel(req.args.model_id, req.args.effort);
+          const effortNote = req.args.effort ? ` / reasoning: \`${req.args.effort}\`` : '';
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `✅ Switched model to \`${req.args.model_id}\`${effortNote}` });
+        }
+        return;
+      }
+
+      if (req.command === 'schedule') {
+        const sub = req.args.sub;
+        if (sub === 'add') {
+          try {
+            const entry = this.scheduler.add({ cron: req.args.cron, channelId: req.args.channelIdTarget, guildId: req.guildId, prompt: req.args.prompt, description: req.args.description });
+            await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `✅ Schedule added: \`${entry.id}\`\nCron: \`${entry.cron}\` → <#${entry.channelId}>\nPrompt: ${entry.prompt.slice(0, 100)}` });
+          } catch (err) {
+            await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: (err as Error).message });
+          }
+        } else if (sub === 'list') {
+          const entries = this.scheduler.list();
+          if (entries.length === 0) await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: '📋 No scheduled tasks' });
+          else {
+            const lines = entries.map(e => `${e.enabled ? '✅' : '⏸️'} \`${e.id}\` — \`${e.cron}\` → <#${e.channelId}>\n　${e.description || e.prompt.slice(0, 60)}`);
+            await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `📋 **Scheduled Tasks (${entries.length})**\n\n${lines.join('\n')}` });
+          }
+        } else if (sub === 'remove') {
+          const removed = this.scheduler.remove(req.args.id);
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: removed ? `✅ Removed schedule \`${req.args.id}\`` : `❌ Schedule \`${req.args.id}\` not found` });
+        }
+        return;
+      }
+
+      if (req.command === 'function') {
+        const sub = req.args.sub;
+        if (sub === 'list') {
+          const files = await this.listFunctionFiles();
+          if (files.length === 0) await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: '📦 **Functions**\n\nNo functions installed.' });
+          else {
+            const lines = files.map(f => `\`${f.file}\` — **${f.name || 'unnamed'}**\n　${f.description || '(no description)'}`);
+            await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `📦 **Functions (${files.length})**\n\n${lines.join('\n')}` });
+          }
+        } else if (sub === 'info') {
+          const filename = await this.resolveFunctionFile(req.args.name);
+          if (!filename) await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: `Function \`${req.args.name}\` not found` });
+          else {
+            try {
+              const { readFile } = await import('fs/promises');
+              const content = await readFile(path.join(this.functionsDir, filename), 'utf-8');
+              const truncated = content.length > 1800 ? content.slice(0, 1800) + '\n... (truncated)' : content;
+              await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `📄 **${filename}**\n\`\`\`ts\n${truncated}\n\`\`\`` });
+            } catch {
+              await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: `Function \`${req.args.name}\` not found` });
+            }
+          }
+        } else if (sub === 'delete') {
+          const filename = await this.resolveFunctionFile(req.args.name);
+          if (!filename) await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: `Function \`${req.args.name}\` not found` });
+          else {
+            try {
+              const { unlink } = await import('fs/promises');
+              await unlink(path.join(this.functionsDir, filename));
+              await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `✅ Deleted function \`${filename}\`` });
+            } catch {
+              await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: `Failed to delete \`${filename}\`` });
+            }
+          }
+        }
+        return;
+      }
+
+      if (req.command === 'prompt') {
+        const prompt = this.promptLoader.getPrompt(req.args.promptName);
+        if (!prompt) {
+          await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: `Prompt \`${req.args.promptName}\` not found` });
+          return;
+        }
+        let fullPrompt = prompt.content;
+        if (req.args.promptArgs) fullPrompt = `${fullPrompt}\n\nAdditional context: ${req.args.promptArgs}`;
+
+        // Respond immediately so IPC doesn't time out while the agent is initializing
+        await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: `✅ プロンプト \`${prompt.name}\` を実行しました` });
+
+        (async () => {
+          const agent = await this.getOrCreateAgent(req.channelId, req.guildId);
+          const incoming = { id: req.id, channelId: req.channelId, author: req.args.username, content: fullPrompt };
+          await agent.processMessage(incoming, [], []);
+        })().catch(err => {
+          logger.error(`[BOT] Prompt execution error (${prompt.name}):`, err);
+        });
+        return;
+      }
+
+      await super.handleIpcRequest(req);
+    } catch (err) {
+      await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: (err as Error).message });
+    }
+  }
+
   private setupEventHandlers(): void {
     this.discord.once('clientReady', async () => {
       logger.log(`[BOT] Ready as ${this.discord.user?.tag}`);
       this.discord.user?.setPresence({ status: 'idle', activities: [] });
-      await this.registerSlashCommands();
+      await this.promptLoader.loadPrompts();
+      await this.setupIpc();
+      if (process.env.ENABLE_SLASH_COMMAND !== '0') {
+        await this.registerSlashCommands();
+      }
     });
 
     this.discord.on('interactionCreate', async (interaction) => {

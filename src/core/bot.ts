@@ -8,6 +8,8 @@ import { writeFile } from 'fs/promises';
 import { logger } from './logger.js';
 import { getConfiguredTemporaryDir } from './temporary_dir.js';
 
+import { IpcServer, IpcRequest, IpcResponse } from './ipc.js';
+
 export type SessionScope = 'channel' | 'server';
 export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex', 'gemini', 'acp'] as const;
 export type AgentProviderType = typeof AGENT_PROVIDER_TYPES[number];
@@ -46,6 +48,7 @@ export abstract class Bot {
   protected readonly scheduler: Scheduler;
   protected sessions = new Map<string, Agent>();
   private processedMessages = new Set<string>();
+  protected ipcServer: IpcServer;
 
   constructor() {
     this.workspaceDir = process.env.WORKSPACE_DIR || 'workspace';
@@ -61,13 +64,40 @@ export abstract class Bot {
       path.join(this.configDir, 'schedules.json'),
       (entry) => this.onScheduleFire(entry),
     );
+    // Use AGENT (PM2 process name) for the IPC socket dir so the orchestrator
+    // can reliably locate the socket even when AGENT_NAME differs.
+    const ipcDir = path.resolve('.kaede', process.env.AGENT?.trim() || this.agentName);
+    this.ipcServer = new IpcServer(ipcDir);
+
     fs.mkdirSync(this.workspaceDir, { recursive: true });
     fs.mkdirSync(this.temporaryDir, { recursive: true });
     fs.mkdirSync(this.configDir, { recursive: true });
+    fs.mkdirSync(ipcDir, { recursive: true });
+    
     logger.log(`[BOT] Agent name: ${this.agentName}`);
     logger.log(`[BOT] Provider: ${this.providerType}`);
     logger.log(`[BOT] Config dir: ${this.configDir}`);
     logger.log(`[BOT] Session scope: ${this.sessionScope}`);
+  }
+
+  protected async setupIpc(): Promise<void> {
+    await this.ipcServer.ensureReady();
+    this.ipcServer.listen(async (req) => {
+      await this.handleIpcRequest(req);
+    });
+  }
+
+  protected async handleIpcRequest(req: IpcRequest): Promise<void> {
+    try {
+      if (req.command === 'clear') {
+        await this.clearAgent(req.channelId, req.guildId);
+        await this.ipcServer.sendResponse(req.id, { id: req.id, success: true, data: '🔄 Session cleared' });
+      } else {
+        await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: 'Unknown IPC command' });
+      }
+    } catch (err) {
+      await this.ipcServer.sendResponse(req.id, { id: req.id, success: false, error: (err as Error).message });
+    }
   }
 
   protected abstract createMessenger(channelId: string): Messenger;

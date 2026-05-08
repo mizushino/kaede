@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "tsx src/index.ts",
+    "orchestrator": "tsx src/orchestrator.ts",
     "mcp": "tsx src/mcp/server.ts"
   },
   "dependencies": {
