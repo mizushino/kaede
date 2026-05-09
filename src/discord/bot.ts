@@ -77,9 +77,9 @@ export class DiscordBot extends Bot {
             .addStringOption(opt =>
               opt.setName('mode').setDescription('Response mode').setRequired(true)
                 .addChoices(
-                  { name: 'all (respond to every message)', value: 'all' },
-                  { name: 'mention (only @ or reply)', value: 'mention' },
-                  { name: 'keyword (mention or keyword)', value: 'keyword' },
+                  { name: 'all', value: 'all' },
+                  { name: 'mention', value: 'mention' },
+                  { name: 'keyword', value: 'keyword' },
                 )))
         .addSubcommand(sub =>
           sub.setName('reset').setDescription('Remove channel override (use default)')),
