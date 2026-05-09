@@ -75,18 +75,17 @@ export abstract class Messenger {
 
   async startTyping(): Promise<void> {
     this.stopTyping();
-    try {
-      await this.sendTypingIndicator();
-      this.typingInterval = setInterval(async () => {
-        try {
-          await this.sendTypingIndicator();
-        } catch {
-          this.stopTyping();
-        }
-      }, TYPING_INTERVAL);
-    } catch (err) {
+
+    // Typing is best-effort UI only. Never block message processing on it.
+    void this.sendTypingIndicator().catch(err => {
       logger.error('[Messenger] Failed to start typing:', err);
-    }
+    });
+
+    this.typingInterval = setInterval(() => {
+      void this.sendTypingIndicator().catch(() => {
+        this.stopTyping();
+      });
+    }, TYPING_INTERVAL);
   }
 
   stopTyping(): void {
