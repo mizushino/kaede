@@ -71,15 +71,14 @@ export class DiscordBot extends Bot {
         .setDescription('Control automatic replies in this channel')
         .addSubcommand(sub => sub.setName('all').setDescription('Reply to all messages in this channel'))
         .addSubcommand(sub => sub.setName('mention').setDescription('Reply only when mentioned'))
-        .addSubcommand(sub =>
-          sub.setName('keyword').setDescription('Reply when a keyword is detected')
-            .addStringOption(opt =>
-              opt.setName('keywords')
-                .setDescription('Comma-separated keywords')
-                .setRequired(false)))
         .addSubcommand(sub => sub.setName('off').setDescription('Disable automatic replies'))
         .addSubcommand(sub => sub.setName('reset').setDescription('Reset to default mode'))
-        .addSubcommand(sub => sub.setName('status').setDescription('Show current watch settings')),
+        .addSubcommand(sub =>
+          sub.setName('keyword').setDescription('Set keyword mode')
+            .addStringOption(opt =>
+              opt.setName('keywords')
+                .setDescription('Comma-separated keywords (omit to keep existing)')
+                .setRequired(false))),
       new SlashCommandBuilder()
         .setName('stats')
         .setDescription('Show request usage statistics')
@@ -247,17 +246,9 @@ export class DiscordBot extends Bot {
     if (interaction.commandName === 'watch') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const channelId = interaction.channelId;
-      const sub = interaction.options.getSubcommand(false);
-      if (!sub || sub === 'status') {
-        const effective = this.responseFilter.getEffectiveMode(channelId);
-        const keywords = effective === 'keyword' ? this.responseFilter.getEffectiveKeywords(channelId) : [];
-        const keywordsLine = effective === 'keyword' && keywords.length > 0
-          ? `\nKeywords: \`${keywords.join(', ')}\``
-          : '';
-        await interaction.editReply({
-          content: `🎛️ **Watch settings**\nCurrent: \`${effective}\`${keywordsLine}`,
-        });
-      } else if (sub === 'reset') {
+      const sub = interaction.options.getSubcommand();
+
+      if (sub === 'reset') {
         const removed = this.responseFilter.clearOverride(channelId);
         const current = this.responseFilter.getDefaultMode();
         await interaction.editReply({
@@ -265,24 +256,27 @@ export class DiscordBot extends Bot {
             ? `✅ Reset this channel. Current: \`${current}\``
             : `ℹ️ This channel is already using the default. Current: \`${current}\``,
         });
+      } else if (sub === 'keyword') {
+        const keywordsRaw = interaction.options.getString('keywords');
+        const keywords = keywordsRaw
+          ? keywordsRaw.split(',').map(s => s.trim()).filter(Boolean)
+          : undefined;
+        this.responseFilter.setOverride(channelId, 'keyword', keywords);
+        const effectiveKeywords = this.responseFilter.getEffectiveKeywords(channelId);
+        const warning = effectiveKeywords.length === 0
+          ? '\n⚠️ No keywords are configured. Non-mention messages will be ignored.'
+          : '';
+        const keywordsLine = effectiveKeywords.length > 0
+          ? `\nKeywords: \`${effectiveKeywords.join(', ')}\``
+          : '';
+        await interaction.editReply({ content: `✅ Current: \`keyword\`${keywordsLine}${warning}` });
       } else {
         if (!isResponseMode(sub)) {
           await interaction.editReply({ content: `❌ Invalid mode: \`${sub}\`` });
           return;
         }
-        const keywordsRaw = interaction.options.getString('keywords');
-        const keywords = keywordsRaw
-          ? keywordsRaw.split(',').map(s => s.trim()).filter(Boolean)
-          : undefined;
-        this.responseFilter.setOverride(channelId, sub as ResponseMode, keywords);
-        const effectiveKeywords = sub === 'keyword' ? this.responseFilter.getEffectiveKeywords(channelId) : [];
-        const warning = (sub === 'keyword' && effectiveKeywords.length === 0)
-          ? '\n⚠️ No keywords are configured. Non-mention messages will be ignored.'
-          : '';
-        const keywordsLine = (sub === 'keyword' && effectiveKeywords.length > 0)
-          ? `\nKeywords: \`${effectiveKeywords.join(', ')}\``
-          : '';
-        await interaction.editReply({ content: `✅ Current: \`${sub}\`${keywordsLine}${warning}` });
+        this.responseFilter.setOverride(channelId, sub as ResponseMode);
+        await interaction.editReply({ content: `✅ Current: \`${sub}\`` });
       }
       return;
     }
