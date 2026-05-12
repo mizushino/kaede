@@ -67,22 +67,21 @@ export class DiscordBot extends Bot {
         .setName('clear')
         .setDescription('Clear the current AI session'),
       new SlashCommandBuilder()
-        .setName('response')
-        .setDescription('Manage per-channel response mode')
-        .addSubcommand(sub =>
-          sub.setName('status').setDescription('Show effective response mode for this channel'))
-        .addSubcommand(sub =>
-          sub.setName('set')
-            .setDescription('Override the response mode for this channel')
-            .addStringOption(opt =>
-              opt.setName('mode').setDescription('Response mode').setRequired(true)
-                .addChoices(
-                  { name: 'all', value: 'all' },
-                  { name: 'mention', value: 'mention' },
-                  { name: 'keyword', value: 'keyword' },
-                )))
-        .addSubcommand(sub =>
-          sub.setName('reset').setDescription('Remove channel override (use default)')),
+        .setName('watch')
+        .setDescription('Control automatic replies in this channel')
+        .addStringOption(opt =>
+          opt.setName('mode').setDescription('Watch mode').setRequired(false)
+            .addChoices(
+              { name: 'all', value: 'all' },
+              { name: 'mention', value: 'mention' },
+              { name: 'keyword', value: 'keyword' },
+              { name: 'off', value: 'off' },
+              { name: 'reset', value: 'reset' },
+            ))
+        .addStringOption(opt =>
+          opt.setName('keywords')
+            .setDescription('Comma-separated keywords for keyword mode')
+            .setRequired(false)),
       new SlashCommandBuilder()
         .setName('stats')
         .setDescription('Show request usage statistics')
@@ -247,41 +246,45 @@ export class DiscordBot extends Bot {
       return;
     }
 
-    if (interaction.commandName === 'response') {
+    if (interaction.commandName === 'watch') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const sub = interaction.options.getSubcommand();
       const channelId = interaction.channelId;
-      if (sub === 'status') {
+      const mode = interaction.options.getString('mode');
+      const keywordsRaw = interaction.options.getString('keywords');
+      if (!mode) {
         const effective = this.responseFilter.getEffectiveMode(channelId);
-        const override = this.responseFilter.getOverride(channelId);
-        const def = this.responseFilter.getDefaultMode();
-        const kw = this.responseFilter.getKeywords();
-        const kwLine = kw.length > 0 ? `\nKeywords: \`${kw.join(', ')}\`` : '';
-        const overrideLine = override
-          ? `Override: \`${override}\``
-          : `Override: (none — using default)`;
+        const keywords = effective === 'keyword' ? this.responseFilter.getEffectiveKeywords(channelId) : [];
+        const keywordsLine = effective === 'keyword' && keywords.length > 0
+          ? `\nKeywords: \`${keywords.join(', ')}\``
+          : '';
         await interaction.editReply({
-          content: `🎛️ **Response settings**\nEffective mode: \`${effective}\`\n${overrideLine}\nDefault: \`${def}\`${kwLine}`,
+          content: `🎛️ **Watch settings**\nCurrent: \`${effective}\`${keywordsLine}`,
         });
-      } else if (sub === 'set') {
-        const mode = interaction.options.getString('mode', true);
+      } else if (mode === 'reset') {
+        const removed = this.responseFilter.clearOverride(channelId);
+        const current = this.responseFilter.getDefaultMode();
+        await interaction.editReply({
+          content: removed
+            ? `✅ Reset this channel. Current: \`${current}\``
+            : `ℹ️ This channel is already using the default. Current: \`${current}\``,
+        });
+      } else {
         if (!isResponseMode(mode)) {
           await interaction.editReply({ content: `❌ Invalid mode: \`${mode}\`` });
           return;
         }
-        this.responseFilter.setOverride(channelId, mode as ResponseMode);
-        const warning = (mode === 'keyword' && this.responseFilter.getKeywords().length === 0)
-          ? '\n⚠️ Keywords are not configured (`RESPONSE_KEYWORDS` is empty). Non-mention messages will be ignored.'
+        const keywords = keywordsRaw
+          ? keywordsRaw.split(',').map(s => s.trim()).filter(Boolean)
+          : undefined;
+        this.responseFilter.setOverride(channelId, mode as ResponseMode, keywords);
+        const effectiveKeywords = mode === 'keyword' ? this.responseFilter.getEffectiveKeywords(channelId) : [];
+        const warning = (mode === 'keyword' && effectiveKeywords.length === 0)
+          ? '\n⚠️ No keywords are configured. Non-mention messages will be ignored.'
           : '';
-        await interaction.editReply({ content: `✅ Channel response mode set to \`${mode}\`${warning}` });
-      } else if (sub === 'reset') {
-        const removed = this.responseFilter.clearOverride(channelId);
-        const def = this.responseFilter.getDefaultMode();
-        await interaction.editReply({
-          content: removed
-            ? `✅ Override removed. Falling back to default \`${def}\`.`
-            : `ℹ️ No override was set. Default is \`${def}\`.`,
-        });
+        const keywordsLine = (mode === 'keyword' && effectiveKeywords.length > 0)
+          ? `\nKeywords: \`${effectiveKeywords.join(', ')}\``
+          : '';
+        await interaction.editReply({ content: `✅ Current: \`${mode}\`${keywordsLine}${warning}` });
       }
       return;
     }
@@ -317,9 +320,11 @@ export class DiscordBot extends Bot {
         .map(([m, c]) => `${m}(${c})`)
         .join(' ') || 'none';
 
+      const watchMode = this.responseFilter.getEffectiveMode(interaction.channelId);
       await interaction.editReply({
         content:
-          `📊 **Request Statistics**\n\n` +
+          `📊 **Request Statistics**\n` +
+          `👀 **Current:** \`${watchMode}\`\n\n` +
           `📆 **Last ${days} Day${days === 1 ? '' : 's'}** (↓recv ↑sent)\n${dailyLines}\n\n` +
           `📋 **${days}-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
       });
