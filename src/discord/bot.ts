@@ -645,6 +645,12 @@ export class DiscordBot extends Bot {
 
       logger.log(`[BOT] Message from ${message.author.username}: ${message.content || '[Attachments]'}`);
 
+      // Handle !watch text commands (bypasses shouldRespond check)
+      if (message.content.includes('!watch')) {
+        const watchOnly = await this.handleTextWatchCommand(message);
+        if (watchOnly) return; // message had no other content, skip AI
+      }
+
       const botUserId = this.discord.user?.id ?? '';
       if (!this.responseFilter.shouldRespond(message, botUserId)) {
         const mode = this.responseFilter.getEffectiveMode(message.channel.id);
@@ -682,6 +688,40 @@ export class DiscordBot extends Bot {
         logger.error('[BOT] processMessage failed:', err);
       });
     });
+  }
+
+  private async handleTextWatchCommand(message: Message): Promise<boolean> {
+    // Match !watch anywhere in the message: !watch <mode> [keywords]
+    const match = message.content.match(/!watch\s+(\w+)(?:\s+(.+))?/i);
+    if (!match) return false;
+
+    const sub = match[1].toLowerCase();
+    const channelId = message.channel.id;
+    let applied = false;
+
+    if (sub === 'reset') {
+      this.responseFilter.clearOverride(channelId);
+      applied = true;
+    } else if (sub === 'keyword') {
+      const keywordsRaw = match[2] ?? '';
+      const keywords = keywordsRaw
+        ? keywordsRaw.split(',').map(s => s.trim()).filter(Boolean)
+        : undefined;
+      this.responseFilter.setOverride(channelId, 'keyword', keywords);
+      applied = true;
+    } else if (isResponseMode(sub)) {
+      this.responseFilter.setOverride(channelId, sub);
+      applied = true;
+    }
+
+    if (!applied) return false;
+
+    // Check if message has other content besides the !watch command
+    const otherContent = message.content.replace(/!watch\s+\S+(\s+.+)?/gi, '').trim();
+    const watchOnly = otherContent.length === 0;
+
+    await message.react('✅').catch(() => {});
+    return watchOnly; // true = skip AI (no other content)
   }
 
   private async listFunctionFiles(): Promise<{ file: string; name?: string; description?: string }[]> {
