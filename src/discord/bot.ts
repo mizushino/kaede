@@ -313,12 +313,14 @@ export class DiscordBot extends Bot {
         .join(' ') || 'none';
 
       const watchMode = this.responseFilter.getEffectiveMode(interaction.channelId);
+      const modelLabel = this.model ? `\`${this.providerType}\` / \`${this.model}\`` : `\`${this.providerType}\``;
       await interaction.editReply({
         content:
-          `📊 **Request Statistics**\n` +
-          `👀 **Current:** \`${watchMode}\`\n\n` +
-          `📆 **Last ${days} Day${days === 1 ? '' : 's'}** (↓recv ↑sent)\n${dailyLines}\n\n` +
-          `📋 **${days}-Day Total:** ${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
+          `## 📊 Request Statistics\n` +
+          `🤖 Model: ${modelLabel}\n` +
+          `👀 Watch: \`${watchMode}\`\n\n` +
+          `## 📆 Last ${days} Day${days === 1 ? '' : 's'} (↓recv ↑sent)\n${dailyLines}\n\n` +
+          `## 📋 ${days}-Day Total\n${totalReq} req (↓${totalRecv} ↑${totalSent}) [${modelSummary}]`,
       });
       return;
     }
