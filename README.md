@@ -431,13 +431,13 @@ DiscordBot (discord/bot.ts)               ← Discord イベント受信
             │    └─ CopilotCodeProvider   ← Copilot セッション・リトライ・関数呼び出し
             │         ├─ Inbox / Tools / FunctionLoader
             │         └─ PermissionHandler
-             ├─ ClaudeAgent  (providers/claude_agent.ts)
-             │    └─ ClaudeCodeProvider    ← Claude Agent SDK ラップ（resume/effort/MCP）
-             ├─ CodexAgent   (providers/codex_agent.ts)
-             │    └─ CodexCodeProvider     ← Codex SDK ラップ（thread/MCP）
-             └─ GeminiAgent  (providers/gemini_agent.ts)
-                  └─ GeminiCodeProvider    ← Gemini CLI (ACP) ラップ（session/MCP）
-                       └─ Discord MCP server (mcp/server.ts)
+            ├─ ClaudeAgent (providers/claude_agent.ts)
+            │    └─ ClaudeCodeProvider     ← Claude Agent SDK ラップ（resume/effort/MCP）
+            ├─ CodexAgent (providers/codex_agent.ts)
+            │    └─ CodexCodeProvider      ← Codex SDK ラップ（thread/MCP）
+            └─ GeminiAgent (providers/gemini_agent.ts)
+                 └─ GeminiCodeProvider     ← Gemini CLI (ACP) ラップ（session/MCP）
+                      └─ Discord MCP server (mcp/server.ts)
 
 Messenger (core/messenger.ts)             ← プラットフォーム抽象化
   └─ DiscordMessenger (discord/messenger.ts)
