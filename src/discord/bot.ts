@@ -558,12 +558,35 @@ export class DiscordBot extends Bot {
         content: fullPrompt,
       };
 
+      // Temporarily switch model if prompt specifies one
+      let prevModel: string | undefined;
+      let prevEffort: string | undefined;
+      if (prompt.model) {
+        try {
+          prevModel = agent.model;
+          prevEffort = agent.reasoningEffort ?? undefined;
+          await agent.setModel(prompt.model);
+        } catch (err) {
+          logger.error(`[BOT] Failed to switch model for prompt ${prompt.name}:`, err);
+          await interaction.editReply(`❌ モデル \`${prompt.model}\` への切り替えに失敗しました`);
+          return;
+        }
+      }
+
       // Fire-and-forget: agent responds via send_message tool.
       // Do NOT await processMessage — it blocks until the session ends (30+ min).
-      agent.processMessage(incoming, [], []).catch(err => {
-        logger.error(`[BOT] Prompt execution error (${prompt.name}):`, err);
-      });
-      await interaction.editReply(`✅ プロンプト \`${prompt.name}\` を実行しました`);
+      const restoreModel = prevModel;
+      agent.processMessage(incoming, [], [])
+        .catch(err => {
+          logger.error(`[BOT] Prompt execution error (${prompt.name}):`, err);
+        })
+        .finally(async () => {
+          if (restoreModel !== undefined) {
+            await agent.setModel(restoreModel, prevEffort as any).catch(() => {});
+          }
+        });
+      const modelNote = prompt.model ? ` (モデル: \`${prompt.model}\`)` : '';
+      await interaction.editReply(`✅ プロンプト \`${prompt.name}\` を実行しました${modelNote}`);
       return;
     }
   }
