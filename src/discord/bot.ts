@@ -660,7 +660,17 @@ export class DiscordBot extends Bot {
     });
 
     this.discord.on('messageCreate', async (message: Message) => {
-      if (message.author.id === this.discord.user?.id) return;
+      const isSelf = message.author.id === this.discord.user?.id;
+
+      // Handle !watch text commands even when posted by self (so the author's
+      // own bot also enters watch mode for that channel/thread).
+      if (isSelf) {
+        if (message.content?.includes('!watch')) {
+          await this.handleTextWatchCommand(message);
+        }
+        return;
+      }
+
       if (message.interaction || message.interactionMetadata) return;
       if (message.system) return;
       if (!message.content && message.attachments.size === 0) return;
