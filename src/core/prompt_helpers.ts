@@ -17,12 +17,12 @@ export function buildIncomingMessagePrompt(items: QueuedMessage[], options: Inco
     channelId: item.message.channelId,
     author: item.message.author,
     content: item.message.content,
-    hasAttachments: item.attachments.length > 0,
-    ...(options.includeAttachments ? { attachments: item.attachments } : {}),
-    ...(item.files.length > 0 ? { files: item.files } : {}),
+    hasAttachments: (item.attachments ?? []).length > 0,
+    ...(options.includeAttachments ? { attachments: item.attachments ?? [] } : {}),
+    ...((item.files ?? []).length > 0 ? { files: item.files } : {}),
   }));
 
-  const allFiles = items.flatMap(item => item.files);
+  const allFiles = items.flatMap(item => item.files ?? []);
   const fileNoteTemplate = options.fileNoteTemplate ?? DEFAULT_FILE_NOTE;
   const fileNote = allFiles.length > 0 ? fileNoteTemplate.replace('{files}', allFiles.join(', ')) : '';
 

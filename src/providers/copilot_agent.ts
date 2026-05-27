@@ -102,7 +102,7 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 	protected async attemptSend(items: QueuedMessage[], attempt: number): Promise<'done' | 'retry' | 'fatal'> {
 		try {
 			const prompt = this.buildPrompt(items);
-			const attachments = items.flatMap(item => item.attachments);
+			const attachments = items.flatMap(item => item.attachments ?? []);
 
 			logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
 
