@@ -91,7 +91,7 @@ export class CopilotCodeProvider extends BaseProvider {
 			? await this.resumeSession()
 			: await this.createFreshSession();
 
-		const imageAttachments = (options?.attachments ?? []).map(filePath => ({ type: 'file' as const, path: filePath }));
+		const imageAttachments = (options?.attachments ?? []).map(filePath => ({ type: 'file' as const, path: path.resolve(filePath) }));
 
 		const turnDeadlineMs = Date.now() + SESSION_TIMEOUT;
 		this.activeTurnDeadlineMs = turnDeadlineMs;
