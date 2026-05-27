@@ -122,6 +122,12 @@ export class CopilotCodeProvider extends BaseProvider {
 			return 'retry';
 		}
 
+		if (message.includes("Cannot read properties of null") || message.includes("Cannot read properties of undefined")) {
+			logger.log(`[${this.context.getModel()}] Null/undefined property error in session, discarding session and retrying`);
+			await this.discardSession();
+			return 'retry';
+		}
+
 		if (message.includes('Connection is closed') || message.includes('ConnectionError') || message.includes('Session not found')) {
 			this.context.clientManager.invalidate();
 			this.currentSession = null;

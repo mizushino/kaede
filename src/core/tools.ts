@@ -141,8 +141,8 @@ export function createTools(ctx: ToolContext) {
             channelId: item.message.channelId,
             author: item.message.author,
             content: item.message.content,
-            attachments: item.attachments,
-            ...(item.files.length > 0 ? { files: item.files } : {}),
+            attachments: item.attachments ?? [],
+            ...((item.files ?? []).length > 0 ? { files: item.files } : {}),
           })),
         };
       },
