@@ -696,7 +696,7 @@ export class DiscordBot extends Bot {
       const fileAttachments: string[] = [];
       for (const [, attachment] of message.attachments) {
         const fileName = `${Date.now()}_${attachment.name}`;
-        const filePath = path.join(this.temporaryDir, fileName);
+        const filePath = path.resolve(this.temporaryDir, fileName);
         try {
           await this.downloadAttachment(attachment.url, filePath);
           if (attachment.contentType?.startsWith('image/')) {
