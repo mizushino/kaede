@@ -134,8 +134,8 @@ export abstract class Bot {
   }
 
   protected isDuplicate(messageId: string): boolean {
-    if (this.processedMessages.has(messageId)) return true;
-    this.processedMessages.add(messageId);
+    const wasNew = this.processedMessages.add(messageId);
+    if (!wasNew) return true;
     if (this.processedMessages.size > 1000) {
       this.processedMessages = new Set([...this.processedMessages].slice(-500));
     }
