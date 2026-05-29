@@ -36,7 +36,9 @@ export class CopilotAgent extends BaseAgent {
 	}
 
 	static async listModels(): Promise<ModelListing> {
-		// カスタムプロバイダーが設定されてたら、そっちからモデル一覧を取得
+		// The Copilot SDK's client.listModels() queries GitHub's model catalog,
+		// which doesn't include models from custom OpenAI-compatible providers.
+		// Fetch from the custom provider directly to show the correct model list.
 		const baseUrl = process.env.COPILOT_PROVIDER_BASE_URL?.replace(/\/+$/, '');
 		const apiKey = process.env.COPILOT_PROVIDER_API_KEY;
 
@@ -67,7 +69,8 @@ export class CopilotAgent extends BaseAgent {
 			}
 		}
 
-		// フォールバック: Copilot SDK経由
+		// Fallback to Copilot SDK when no custom provider is configured
+		// or when the custom provider request failed
 		const client = await this.getClientManager().getClient();
 		const models = await client.listModels();
 		return {
