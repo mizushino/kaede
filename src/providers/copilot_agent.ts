@@ -36,6 +36,38 @@ export class CopilotAgent extends BaseAgent {
 	}
 
 	static async listModels(): Promise<ModelListing> {
+		// カスタムプロバイダーが設定されてたら、そっちからモデル一覧を取得
+		const baseUrl = process.env.COPILOT_PROVIDER_BASE_URL?.replace(/\/+$/, '');
+		const apiKey = process.env.COPILOT_PROVIDER_API_KEY;
+
+		if (baseUrl && apiKey) {
+			try {
+				const res = await fetch(`${baseUrl}/models`, {
+					headers: { 'Authorization': `Bearer ${apiKey}` },
+				});
+				if (res.ok) {
+					const data = await res.json() as { data?: Array<{ id: string }> };
+					if (data.data?.length) {
+						return {
+							models: data.data.map(m => ({
+								id: m.id,
+								displayName: m.id,
+								cost: '-',
+								reasoning: '-',
+								autocompleteLabel: m.id,
+							})),
+							columns: [
+								{ key: 'id', header: 'MODEL' },
+							],
+						};
+					}
+				}
+			} catch (e) {
+				logger.log(`[COPILOT] Failed to fetch models from custom provider: ${(e as Error).message?.slice(0, 100)}`);
+			}
+		}
+
+		// フォールバック: Copilot SDK経由
 		const client = await this.getClientManager().getClient();
 		const models = await client.listModels();
 		return {
