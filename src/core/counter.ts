@@ -161,6 +161,6 @@ export class RequestCounter {
 /** Convert ISO timestamp to JST date string (YYYY-MM-DD) */
 function toJSTDate(iso: string): string {
   const d = new Date(iso);
-  const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-  return jst.toISOString().slice(0, 10);
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' });
+  return formatter.format(d);
 }
