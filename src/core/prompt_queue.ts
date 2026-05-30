@@ -21,6 +21,12 @@ export class PromptQueue<T> implements AsyncIterable<T> {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    // Drain buffered items to waiting resolvers first
+    while (this.buffer.length > 0 && this.resolvers.length > 0) {
+      const resolver = this.resolvers.shift()!;
+      resolver({ value: this.buffer.shift()!, done: false });
+    }
+    // Signal done to remaining resolvers
     for (const resolver of this.resolvers) {
       resolver({ value: undefined as unknown as T, done: true });
     }
