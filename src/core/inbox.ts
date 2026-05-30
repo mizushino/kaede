@@ -40,7 +40,7 @@ export class Inbox {
 
   /** Remove and return all queued messages. */
   drain(): QueuedMessage[] {
-    const drained = this.items;
+    const drained = [...this.items];
     this.items = [];
     return drained;
   }
