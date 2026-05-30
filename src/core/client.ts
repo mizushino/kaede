@@ -74,12 +74,16 @@ export class CopilotClientManager {
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
     const pending = this.clientPromise;
-    this.client = null;
     this.clientPromise = null;
 
     let client: CopilotClient | null = null;
     if (pending) {
       client = await pending.catch(() => null);
+    }
+    // Check if a new client was created after we cleared clientPromise
+    if (!client) {
+      client = this.client;
+      this.client = null;
     }
     if (!client) return;
 
