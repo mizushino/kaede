@@ -87,6 +87,11 @@ export class RequestCounter {
     this.scheduleSave();
   }
 
+  /** Sent messages recorded for the currently running request. */
+  getCurrentSentCount(): number {
+    return this.currentLog?.sent ?? 0;
+  }
+
   /** Finalize the current request log. */
   finalizeRequest(): void {
     if (this.currentLog) {

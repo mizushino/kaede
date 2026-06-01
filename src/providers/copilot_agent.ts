@@ -262,6 +262,8 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 	}
 
 	protected async attemptSend(items: QueuedMessage[], attempt: number): Promise<'done' | 'retry' | 'fatal'> {
+		let sentBeforeAttempt = 0;
+		let sentAfterAttempt = 0;
 		try {
 			const prompt = this.buildPrompt(items);
 			const attachments = items.flatMap(item => item.attachments ?? []);
@@ -269,9 +271,11 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 			logger.log(`[${this.model}] Sending prompt (attempt ${attempt}):\n${prompt.slice(0, 300)}`);
 
 			this.counter.startRequest(this.model, items.length);
+			sentBeforeAttempt = this.counter.getCurrentSentCount();
 			try {
 				await this.provider.sendPrompt(prompt, { attachments });
 			} finally {
+				sentAfterAttempt = this.counter.getCurrentSentCount();
 				this.counter.finalizeRequest();
 			}
 
@@ -281,6 +285,10 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 			const msg = (err as Error).message || '';
 			logger.log(`[${this.model}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);
 			const action = await this.provider.handleSendError(err as Error);
+			if (sentAfterAttempt > sentBeforeAttempt) {
+				logger.log(`[${this.model}] Suppressing retry because send_message already delivered a response`);
+				return 'done';
+			}
 			if (action === 'stop') return 'fatal';
 			if (this.shouldRetry(action, attempt)) return 'retry';
 			if (action === 'connection') {
