@@ -1,5 +1,5 @@
 import { CopilotSession } from '@github/copilot-sdk';
-import type { ElicitationContext, ElicitationResult } from '@github/copilot-sdk';
+import type { ElicitationContext, ElicitationResult, ResumeSessionConfig, Tool } from '@github/copilot-sdk';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import type { CopilotClientManager } from '../core/client.js';
@@ -79,7 +79,7 @@ export class CopilotCodeProvider extends BaseProvider {
 	async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
 		const { config, fnTools } = await this.buildSessionConfig();
 		const session = await this.ensureSession(config, fnTools.length);
-		session.registerTools(config.tools);
+		session.registerTools(config.tools as unknown as Tool[]);
 
 		const imageAttachments = (options?.attachments ?? []).map(filePath => ({ type: 'file' as const, path: filePath }));
 
@@ -235,7 +235,7 @@ IMPORTANT RULES:
 		return { config, fnTools };
 	}
 
-	private async ensureSession(config: any, fnToolCount: number): Promise<CopilotSession> {
+	private async ensureSession(config: ResumeSessionConfig, fnToolCount: number): Promise<CopilotSession> {
 		if (this.currentSession) return this.currentSession;
 		const client = await this.context.clientManager.getClient();
 		const sessionId = this.getSessionId();
@@ -259,9 +259,9 @@ IMPORTANT RULES:
 	}
 
 	private setupEventHandlers(session: CopilotSession): void {
-		session.on('tool.execution_start', (event: any) => {
+		session.on('tool.execution_start', (event) => {
 			const toolName = event?.data?.toolName || '';
-			const args = (event?.data?.parameters || event?.data?.arguments || event?.data?.args || {}) as Record<string, unknown>;
+			const args = event?.data?.arguments || {};
 			const detail = this.formatToolDetail(toolName, args);
 			logger.log(`[${this.context.getModel()}] tool: ${toolName}${detail ? ` | ${detail}` : ''}`);
 			if (toolName !== 'send_message') {
@@ -274,7 +274,7 @@ IMPORTANT RULES:
 			this.context.messenger.stopTyping();
 		});
 
-		session.on('session.usage_info', (event: any) => {
+		session.on('session.usage_info', (event) => {
 			const data = event?.data;
 			if (!data || typeof data.currentTokens !== 'number' || typeof data.tokenLimit !== 'number') return;
 			this.lastUsageInfo = {

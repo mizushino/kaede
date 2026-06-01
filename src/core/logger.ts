@@ -6,13 +6,13 @@ function formatTimestamp(): string {
 }
 
 export const logger = {
-  log: (...args: any[]) => {
+  log: (...args: unknown[]) => {
     console.log(`[${formatTimestamp()}]`, ...args);
   },
-  error: (...args: any[]) => {
+  error: (...args: unknown[]) => {
     console.error(`[${formatTimestamp()}]`, ...args);
   },
-  warn: (...args: any[]) => {
+  warn: (...args: unknown[]) => {
     console.warn(`[${formatTimestamp()}]`, ...args);
   },
 };

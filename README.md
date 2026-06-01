@@ -551,7 +551,7 @@ import { z } from 'zod';
 export const name = 'my-function';
 export const description = '関数の説明';
 
-export function createTools(ctx: any) {
+export function createTools(ctx: unknown) {
   return [
     {
       name: 'my_tool',

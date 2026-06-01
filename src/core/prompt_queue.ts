@@ -1,7 +1,7 @@
 /**
  * Async iterable backed by a FIFO queue. Producers call `push()` to enqueue
  * items; consumers iterate via `for await`. Calling `close()` ends the
- * iteration after any buffered items are drained.
+ * iteration after buffered items are drained.
  */
 export class PromptQueue<T> implements AsyncIterable<T> {
   private buffer: T[] = [];

@@ -22,7 +22,7 @@ export interface ToolContext {
 }
 
 export function createTools(ctx: ToolContext) {
-  const tools: any[] = [
+  const tools = [
     defineTool('send_message', {
       description: 'Send a message to the channel (optionally as a reply). Messages over the limit will be split automatically.',
       parameters: z.object({
@@ -103,7 +103,8 @@ export function createTools(ctx: ToolContext) {
   ];
 
   if (areScheduleManagementToolsEnabled()) {
-    tools.push(
+    return [
+      ...tools,
       defineTool('add_schedule', {
         description: 'Register a scheduled task that sends a message to a channel on a cron schedule (timezone: Asia/Tokyo)',
         parameters: z.object({
@@ -142,7 +143,7 @@ export function createTools(ctx: ToolContext) {
           return removed ? { success: true } : { error: `Schedule "${id}" not found` };
         },
       }),
-    );
+    ];
   }
 
   return tools;

@@ -30,7 +30,7 @@ export class CopilotClientManager {
         }
         // Copilot CLI 1.0.36+ requires COPILOT_MODEL at CLI startup when BYOK is
         // active, even though we also pass `model` per session. Backfill from
-        // AGENT_MODEL unconditionally so the CLI (and any sub-agents it spawns)
+        // AGENT_MODEL unconditionally so the CLI and spawned sub-agents
         // sees the model we configured.
         if (!process.env.COPILOT_MODEL && process.env.AGENT_MODEL) {
           process.env.COPILOT_MODEL = process.env.AGENT_MODEL;

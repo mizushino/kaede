@@ -1,3 +1,4 @@
+import type { ModelListing } from '../providers/base_agent.js';
 import type { ContextUsageInfo, ReasoningEffort } from '../providers/provider.js';
 import { RequestCounter } from './counter.js';
 import { Scheduler } from './scheduler.js';
@@ -31,6 +32,21 @@ export interface Agent {
   dispose(): Promise<void>;
   deleteSession(): Promise<void>;
 }
+
+type AgentClass = {
+  new (
+    messenger: Messenger,
+    workspaceDir: string,
+    model: string,
+    counter: RequestCounter,
+    scheduler: Scheduler,
+    sessionKey?: string,
+    botUserId?: string,
+  ): Agent;
+  warmup?: () => Promise<void>;
+  shutdownProcess?: () => Promise<void>;
+  listModels?: () => Promise<ModelListing>;
+};
 
 export abstract class Bot {
   protected readonly workspaceDir: string;
@@ -77,7 +93,7 @@ export abstract class Bot {
    * `loadAgentClass()` on first need so that SDKs for unselected providers
    * are never imported.
    */
-  protected agentClass: any = null;
+  protected agentClass: AgentClass | null = null;
 
   /**
    * Loads the agent class for the active provider via dynamic import. The

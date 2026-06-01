@@ -75,7 +75,7 @@ export class PromptLoader {
   /**
    * Parse YAML frontmatter from markdown content
    */
-  private parseFrontmatter(content: string): { data: Record<string, any>; content: string } {
+  private parseFrontmatter(content: string): { data: Record<string, unknown>; content: string } {
     const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
     const match = content.match(frontmatterRegex);
 
@@ -84,7 +84,7 @@ export class PromptLoader {
     }
 
     const [, yamlContent, markdownContent] = match;
-    const data: Record<string, any> = {};
+    const data: Record<string, unknown> = {};
 
     // Simple YAML parser for basic key-value pairs
     const lines = yamlContent.split('\n');

@@ -17,6 +17,7 @@ import { DiscordMessenger } from './messenger.js';
 import { PromptLoader } from '../core/prompts.js';
 import { logger } from '../core/logger.js';
 import { areFunctionManagementToolsEnabled, areScheduleManagementToolsEnabled } from '../core/tool_features.js';
+import type { ReasoningEffort } from '../providers/provider.js';
 import { ResponseFilter, isResponseMode, type ResponseMode } from './response_filter.js';
 
 const ENV_SWITCH_IGNORED = new Set(['claude', 'copilot']);
@@ -560,7 +561,7 @@ export class DiscordBot extends Bot {
 
       // Temporarily switch model if prompt specifies one
       let prevModel: string | undefined;
-      let prevEffort: string | undefined;
+      let prevEffort: ReasoningEffort | '' | undefined;
       if (prompt.model) {
         try {
           prevModel = agent.model;
@@ -582,7 +583,7 @@ export class DiscordBot extends Bot {
         })
         .finally(async () => {
           if (restoreModel !== undefined) {
-            await agent.setModel(restoreModel, prevEffort as any).catch(() => {});
+            await agent.setModel(restoreModel, prevEffort).catch(() => {});
           }
         });
       const modelNote = prompt.model ? ` (モデル: \`${prompt.model}\`)` : '';

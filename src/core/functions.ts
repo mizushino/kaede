@@ -1,4 +1,5 @@
 import { defineTool } from '@github/copilot-sdk';
+import type { Tool } from '@github/copilot-sdk';
 import { z, type ZodType } from 'zod';
 import { readdir, readFile, writeFile, unlink } from 'fs/promises';
 import { mkdirSync } from 'fs';
@@ -10,8 +11,8 @@ import { areFunctionManagementToolsEnabled } from './tool_features.js';
 interface RawTool {
   name: string;
   description: string;
-  parameters: ZodType;
-  handler: (args: any) => Promise<unknown>;
+  parameters: ZodType<unknown>;
+  handler: (args: unknown) => Promise<unknown>;
 }
 
 export class FunctionLoader {
@@ -33,9 +34,9 @@ export class FunctionLoader {
   }
 
   /** Load function tools wrapped with defineTool for session registration. */
-  async loadTools(ctx: unknown): Promise<any[]> {
+  async loadTools(ctx: unknown): Promise<Tool[]> {
     const files = await this.listFiles();
-    const sdkTools: any[] = [];
+    const sdkTools: Tool[] = [];
 
     for (const file of files) {
       try {

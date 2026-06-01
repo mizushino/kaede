@@ -90,7 +90,7 @@ export abstract class BaseAgent implements Agent {
 
     // Race guard: a message may have been pushed after the loop drained but
     // before its `finally` cleared `processingPromise`. If so, the loop exited
-    // without processing it. Restart processing here for any leftover items.
+    // before processing the remaining items, so restart it here.
     if (this.queue.length > 0 && !this.processingPromise) {
       this.processingPromise = this.runProcessingLoop();
       await this.processingPromise;

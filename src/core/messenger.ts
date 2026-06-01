@@ -135,7 +135,7 @@ export abstract class Messenger {
     this.applyIdle();
   }
 
-  /** Release any timers held by this messenger. Call on agent dispose. */
+  /** Release timers held by this messenger. Call on agent dispose. */
   dispose(): void {
     this.stopTyping();
     if (this.statusUpdateTimeout) {

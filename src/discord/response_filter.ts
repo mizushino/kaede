@@ -149,7 +149,7 @@ export class ResponseFilter {
 
     if (mode === 'mention') return false;
 
-    // keyword mode: case-insensitive substring match on any keyword.
+    // keyword mode: case-insensitive substring match against configured keywords.
     const content = (message.content || '').toLowerCase();
     if (!content) return false;
     return this.getEffectiveKeywords(message.channel.id).some(k => content.includes(k));
