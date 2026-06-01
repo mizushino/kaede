@@ -14,7 +14,6 @@ import type { ContextUsageInfo, ProviderContext, ProviderOptions, ReasoningEffor
 export type ReasoningEffort = BaseReasoningEffort;
 export type CopilotSendErrorAction = 'retry' | 'stop' | 'connection' | 'fail';
 
-const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 10_800_000;
 const USER_RESPONSE_TIMEOUT = Number(process.env.USER_RESPONSE_TIMEOUT_MS) || 300_000;
 export const DEFAULT_REASONING_EFFORT = (process.env.AGENT_REASONING_EFFORT || '') as ReasoningEffort | '';
 
@@ -37,8 +36,6 @@ export class CopilotCodeProvider extends BaseProvider {
 	readonly name = 'copilot';
 
 	private currentSession: CopilotSession | null = null;
-	private resumeOnNextMessage = false;
-	private activeTurnDeadlineMs: number | null = null;
 	private lastUsageInfo: {
 		currentTokens: number;
 		tokenLimit: number;
@@ -60,14 +57,7 @@ export class CopilotCodeProvider extends BaseProvider {
 		if (this.currentSession) {
 			try { await this.currentSession.disconnect(); } catch {}
 			this.currentSession = null;
-			this.activeTurnDeadlineMs = null;
-			this.resumeOnNextMessage = true;
 		}
-	}
-
-	getRemainingTurnTimeMs(): number | null {
-		if (this.activeTurnDeadlineMs == null) return null;
-		return Math.max(0, this.activeTurnDeadlineMs - Date.now());
 	}
 
 	override async getContextUsage(): Promise<ContextUsageInfo | null> {
@@ -87,25 +77,16 @@ export class CopilotCodeProvider extends BaseProvider {
 	}
 
 	async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
-		const session = this.resumeOnNextMessage
-			? await this.resumeSession()
-			: await this.createFreshSession();
+		const { config, fnTools } = await this.buildSessionConfig();
+		const session = await this.ensureSession(config, fnTools.length);
+		session.registerTools(config.tools);
 
 		const imageAttachments = (options?.attachments ?? []).map(filePath => ({ type: 'file' as const, path: filePath }));
 
-		const turnDeadlineMs = Date.now() + SESSION_TIMEOUT;
-		this.activeTurnDeadlineMs = turnDeadlineMs;
-
-		try {
-			await session.sendAndWait({
-				prompt,
-				...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
-			}, SESSION_TIMEOUT);
-		} finally {
-			if (this.activeTurnDeadlineMs === turnDeadlineMs) {
-				this.activeTurnDeadlineMs = null;
-			}
-		}
+		await session.sendAndWait({
+			prompt,
+			...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
+		});
 	}
 
 	async handleSendError(error: Error): Promise<CopilotSendErrorAction> {
@@ -131,7 +112,6 @@ export class CopilotCodeProvider extends BaseProvider {
 		if (message.includes('Connection is closed') || message.includes('ConnectionError') || message.includes('Session not found')) {
 			this.context.clientManager.invalidate();
 			this.currentSession = null;
-			this.activeTurnDeadlineMs = null;
 			return 'connection';
 		}
 
@@ -139,7 +119,6 @@ export class CopilotCodeProvider extends BaseProvider {
 	}
 
 	dispose(): void {
-		this.activeTurnDeadlineMs = null;
 		this.disconnectCurrentSession();
 		super.dispose();
 	}
@@ -163,8 +142,6 @@ export class CopilotCodeProvider extends BaseProvider {
 	private async discardSession(): Promise<void> {
 		const sessionId = this.getSessionId();
 		this.disconnectCurrentSession();
-		this.activeTurnDeadlineMs = null;
-		this.resumeOnNextMessage = false;
 
 		const client = await this.context.clientManager.getClient();
 		try { await client.deleteSession(sessionId); } catch {}
@@ -251,27 +228,23 @@ ${areScheduleManagementToolsEnabled()
 
 IMPORTANT RULES:
 - ALWAYS use the send_message tool to send responses. Never output text directly without calling send_message.
-- When you need clarification or want the user to choose from options, use the built-in user input flow instead of only describing a question in plain text.
-- ALWAYS call wait_messages after every response, even if you have nothing to say. This keeps you online and ready for the next message.
-- Do not end the session without calling wait_messages.${this.buildAgentsMdAppend()}`,
+- When you need clarification or want the user to choose from options, use the built-in user input flow instead of only describing a question in plain text.${this.buildAgentsMdAppend()}`,
 			},
 		};
 
 		return { config, fnTools };
 	}
 
-	private async createFreshSession(): Promise<CopilotSession> {
-		this.disconnectCurrentSession();
-
+	private async ensureSession(config: any, fnToolCount: number): Promise<CopilotSession> {
+		if (this.currentSession) return this.currentSession;
 		const client = await this.context.clientManager.getClient();
 		const sessionId = this.getSessionId();
-		const { config, fnTools } = await this.buildSessionConfig();
 
 		try {
 			const session = await client.resumeSession(sessionId, config);
 			this.setupEventHandlers(session);
 			this.currentSession = session;
-			logger.log(`[${this.context.getModel()}] Resumed existing session ${sessionId} (${fnTools.length} function tool(s) loaded)`);
+			logger.log(`[${this.context.getModel()}] Resumed session ${sessionId} (${fnToolCount} function tool(s) loaded)`);
 			return session;
 		} catch (error) {
 			logger.log(`[${this.context.getModel()}] Could not resume session ${sessionId}: ${(error as Error).message?.slice(0, 100) || 'unknown'}`);
@@ -281,20 +254,7 @@ IMPORTANT RULES:
 		const session = await client.createSession({ sessionId, ...config });
 		this.setupEventHandlers(session);
 		this.currentSession = session;
-		logger.log(`[${this.context.getModel()}] Created session ${sessionId} (${fnTools.length} function tool(s) loaded)`);
-		return session;
-	}
-
-	private async resumeSession(): Promise<CopilotSession> {
-		const client = await this.context.clientManager.getClient();
-		const sessionId = this.getSessionId();
-		const { config } = await this.buildSessionConfig();
-
-		const session = await client.resumeSession(sessionId, config);
-		this.setupEventHandlers(session);
-		this.currentSession = session;
-		this.resumeOnNextMessage = false;
-		logger.log(`[${this.context.getModel()}] Resumed session ${sessionId} with new model`);
+		logger.log(`[${this.context.getModel()}] Created session ${sessionId} (${fnToolCount} function tool(s) loaded)`);
 		return session;
 	}
 

@@ -1,6 +1,6 @@
 import path from 'path';
 import type { Messenger } from '../core/messenger.js';
-import { QueuedMessage } from '../core/inbox.js';
+import type { QueuedMessage } from '../core/messages.js';
 import type { RequestCounter } from '../core/counter.js';
 import type { Scheduler } from '../core/scheduler.js';
 import { getClaudeDiscordPromptSignatures } from '../core/tool_contract.js';
@@ -125,7 +125,6 @@ export class McpAgent extends BaseAgent {
   }
 
   async dispose(): Promise<void> {
-    this.queue.abort();
     await this.syncPendingQueueSnapshot();
     this.messenger.dispose();
     await this.provider.dispose();
@@ -140,7 +139,7 @@ export class McpAgent extends BaseAgent {
     try {
       await writePendingQueueSnapshot(
         this.sessionKey,
-        this.queue.snapshot().map(item => ({
+        this.queue.map(item => ({
           id: item.message.id,
           channelId: item.message.channelId,
           author: item.message.author,
@@ -163,7 +162,7 @@ export class McpAgent extends BaseAgent {
         const deferred = deferredReplies[index];
         const unsentMarker = buildDeferredReplyMarker(deferred);
 
-        this.queue.pushFront({
+        this.queue.unshift({
           message: {
             id: deferred.id || `unsent-${Date.now()}`,
             channelId: deferred.channelId,

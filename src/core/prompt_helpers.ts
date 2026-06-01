@@ -1,4 +1,4 @@
-import type { QueuedMessage } from './inbox.js';
+import type { QueuedMessage } from './messages.js';
 
 export interface IncomingPromptOptions {
   /** Include the raw `attachments` array in the JSON message data (Claude only). */

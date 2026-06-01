@@ -1,15 +1,12 @@
 import { defineTool } from '@github/copilot-sdk';
 import { z } from 'zod';
-import { Inbox } from './inbox.js';
+import type { QueuedMessage } from './messages.js';
 import type { Messenger } from './messenger.js';
 import type { RequestCounter } from './counter.js';
 import type { Scheduler } from './scheduler.js';
 import { logger } from './logger.js';
 import { buildDeferredReplyMarker } from './queue_state.js';
 import { areScheduleManagementToolsEnabled } from './tool_features.js';
-
-const WAIT_TIMEOUT = Number(process.env.WAIT_TIMEOUT_MS) || 1_800_000; // 30 min
-const WAIT_TIMEOUT_MARGIN = 5_000;
 
 function hasInternalSummary(content?: string): boolean {
   if (!content) return false;
@@ -18,22 +15,10 @@ function hasInternalSummary(content?: string): boolean {
 
 export interface ToolContext {
   model: string;
-  queue: Inbox;
+  queue: QueuedMessage[];
   messenger: Messenger;
   counter: RequestCounter;
   scheduler: Scheduler;
-  getRemainingTurnTimeMs(): number | null;
-}
-
-function getEffectiveWaitTimeout(ctx: ToolContext): number {
-  const remainingTurnTime = ctx.getRemainingTurnTimeMs();
-  const turnLimitedTimeout = remainingTurnTime == null
-    ? WAIT_TIMEOUT
-    : remainingTurnTime > WAIT_TIMEOUT_MARGIN
-      ? remainingTurnTime - WAIT_TIMEOUT_MARGIN
-      : remainingTurnTime;
-
-  return Math.max(0, Math.min(WAIT_TIMEOUT, turnLimitedTimeout));
 }
 
 export function createTools(ctx: ToolContext) {
@@ -57,7 +42,7 @@ export function createTools(ctx: ToolContext) {
         if (ctx.queue.length > 0) {
           const unsentMarker = buildDeferredReplyMarker({ channelId, content, messageId, imagePath });
 
-          ctx.queue.pushFront({
+          ctx.queue.unshift({
             message: {
               id: `unsent-${Date.now()}`,
               channelId,
@@ -112,39 +97,6 @@ export function createTools(ctx: ToolContext) {
         } catch (err: unknown) {
           return { error: (err as Error).message };
         }
-      },
-    }),
-
-    defineTool('wait_messages', {
-      description: 'Wait for new messages. Call this after responding.',
-      parameters: z.object({}),
-      skipPermission: true,
-      handler: async () => {
-        ctx.messenger.stopTyping();
-        ctx.messenger.clearStatus();
-
-        await ctx.queue.waitForMessage(getEffectiveWaitTimeout(ctx));
-
-        if (ctx.queue.length === 0) {
-          return { messages: [] };
-        }
-
-        await ctx.messenger.startTyping();
-        ctx.messenger.setStatus('👀 check_message');
-
-        const items = ctx.queue.drain();
-        ctx.counter.addReceived(items.length);
-        logger.log(`[${ctx.model}] Checking messages (${items.length})`);
-        return {
-          messages: items.map(item => ({
-            id: item.message.id,
-            channelId: item.message.channelId,
-            author: item.message.author,
-            content: item.message.content,
-            attachments: item.attachments ?? [],
-            ...((item.files ?? []).length > 0 ? { files: item.files } : {}),
-          })),
-        };
       },
     }),
 

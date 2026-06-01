@@ -12,7 +12,6 @@ GitHub Copilot SDK / Claude Agent SDK / Codex SDK / Gemini CLI (ACP) を利用�
 - 🔐 **柔軟な権限管理**: 操作種別ごとの自動承認や、Discord リアクションによる対話的な承認をきめ細かく制御できます。
 - 🌐 **マルチスコープ対応**: チャンネル単位／サーバー単位でセッションを使い分け、目的に応じた会話空間を構築できます。
 - ⚡ **高効率メッセージング**: イベント駆動型のキューイングで、複数メッセージを取りこぼしなく順序通りに処理します。
-- 💰 **圧倒的なコスト最適化**: 独自の仕組みにより、Copilot のリクエスト数を大幅に抑制します（※5月末までの限定機能）。
 
 ## 🚀 セットアップ
 
@@ -385,7 +384,7 @@ src/
 │   ├── bot.ts            # Bot 基底クラス（チャンネル/サーバーごとの Agent 管理・provider 切替）
 │   ├── client.ts         # Copilot クライアント管理（遅延初期化・再接続）
 │   ├── messenger.ts      # メッセージング抽象クラス（プラットフォーム共通ロジック）
-│   ├── inbox.ts          # メッセージキュー（イベント駆動・タイムアウト）
+│   ├── messages.ts       # メッセージ型定義
 │   ├── permissions.ts    # 権限管理（自動承認 / ユーザー確認）
 │   ├── functions.ts      # 関数ローダー（動的インポート・CRUD・ホットリロード）
 │   ├── prompts.ts        # `.prompt.md` ローダー（カスタムスラッシュコマンド）
@@ -429,7 +428,7 @@ DiscordBot (discord/bot.ts)               ← Discord イベント受信
        └─ Agent (provider 切替, BaseAgent を継承)
             ├─ CopilotAgent (providers/copilot_agent.ts)
             │    └─ CopilotCodeProvider   ← Copilot セッション・リトライ・関数呼び出し
-            │         ├─ Inbox / Tools / FunctionLoader
+            │         ├─ Tools / FunctionLoader
             │         └─ PermissionHandler
             ├─ ClaudeAgent (providers/claude_agent.ts)
             │    └─ ClaudeCodeProvider     ← Claude Agent SDK ラップ（resume/effort/MCP）
@@ -515,9 +514,6 @@ Hello! I'm your AI assistant. How can I help you today?
 | `send_message` | 💬 メッセージ送信（リプライ・画像添付対応、自動分割） |
 | `get_messages` | 📨 チャンネルのメッセージ履歴取得 |
 | `get_channels` | 📁 サーバーのチャンネル一覧取得 |
-| `wait_messages` | ⏳ 新着メッセージ待機（イベント駆動） |
-
-AI は応答後 `wait_messages` を呼び出して新着を待ち、メッセージが来ると即座に処理を再開します。タイムアウト時はセッションが終了し、次のメッセージで新しいセッションが作成されます。
 
 ### スケジュール管理ツール
 

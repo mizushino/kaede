@@ -1,6 +1,6 @@
 import type { Agent } from '../core/bot.js';
 import type { RequestCounter } from '../core/counter.js';
-import { Inbox, type IncomingMessage, type QueuedMessage } from '../core/inbox.js';
+import type { IncomingMessage, QueuedMessage } from '../core/messages.js';
 import type { Messenger } from '../core/messenger.js';
 import type { Scheduler } from '../core/scheduler.js';
 import { logger } from '../core/logger.js';
@@ -29,7 +29,7 @@ export abstract class BaseAgent implements Agent {
   readonly scheduler: Scheduler;
   readonly sessionKey: string;
   readonly botUserId: string;
-  readonly queue = new Inbox();
+  readonly queue: QueuedMessage[] = [];
 
   protected processingPromise: Promise<void> | null = null;
   protected readonly maxRetries = DEFAULT_MAX_RETRIES;
@@ -73,10 +73,6 @@ export abstract class BaseAgent implements Agent {
     await this.provider.setModel();
   }
 
-  getRemainingTurnTimeMs(): number | null {
-    return this.provider.getRemainingTurnTimeMs();
-  }
-
   async getContextUsage(): Promise<ContextUsageInfo | null> {
     return this.provider.getContextUsage();
   }
@@ -105,7 +101,7 @@ export abstract class BaseAgent implements Agent {
     let loopError: unknown;
     try {
       while (true) {
-        const items = this.queue.drain();
+        const items = this.queue.splice(0);
         await this.beforeIteration();
         if (items.length === 0) break;
 
@@ -140,7 +136,6 @@ export abstract class BaseAgent implements Agent {
   }
 
   async dispose(): Promise<void> {
-    this.queue.abort();
     this.messenger.dispose();
     await this.provider.dispose();
   }

@@ -62,7 +62,7 @@ export class RequestCounter {
     }
   }
 
-  /** Start a new request log entry. Call before sendAndWait. */
+  /** Start a new request log entry. */
   startRequest(model: string, receivedCount: number): void {
     if (this.currentLog) {
       this.logs.push(this.currentLog);
@@ -78,7 +78,7 @@ export class RequestCounter {
     this.scheduleSave();
   }
 
-  /** Increment sent count for the current request */
+  /** Increment sent count for the current request. */
   incrementSendMessage(): void {
     if (this.currentLog) {
       this.currentLog.sent++;
@@ -87,16 +87,7 @@ export class RequestCounter {
     this.scheduleSave();
   }
 
-  /** Add received messages to the current request */
-  addReceived(count: number): void {
-    if (this.currentLog) {
-      this.currentLog.recv += count;
-      this.currentLog.lastUpdated = new Date().toISOString();
-    }
-    this.scheduleSave();
-  }
-
-  /** Finalize the current request log */
+  /** Finalize the current request log. */
   finalizeRequest(): void {
     if (this.currentLog) {
       this.logs.push(this.currentLog);

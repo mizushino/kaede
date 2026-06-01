@@ -1,7 +1,7 @@
 import path from 'path';
 import { CopilotClientManager } from '../core/client.js';
 import { FunctionLoader } from '../core/functions.js';
-import { QueuedMessage } from '../core/inbox.js';
+import type { QueuedMessage } from '../core/messages.js';
 import type { Messenger } from '../core/messenger.js';
 import { loadPermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
@@ -116,7 +116,6 @@ export class CopilotAgent extends BaseAgent {
 				messenger: this.messenger,
 				counter: this.counter,
 				scheduler: this.scheduler,
-				getRemainingTurnTimeMs: () => this.provider.getRemainingTurnTimeMs(),
 			}),
 		});
 	}

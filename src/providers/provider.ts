@@ -251,10 +251,6 @@ export abstract class BaseProvider {
   /** Reset session-level state when the agent's model changes. */
   async setModel(): Promise<void> {}
 
-  getRemainingTurnTimeMs(): number | null {
-    return null;
-  }
-
   /** Optional: return current context window usage if the provider exposes it. */
   async getContextUsage(): Promise<ContextUsageInfo | null> {
     return null;
