@@ -1,6 +1,6 @@
 # 🍁 Kaede
 
-GitHub Copilot SDK / Claude Agent SDK / Codex SDK / Gemini CLI (ACP) を利用した Discord AI エージェント。チャンネルやフォーラムスレッドで AI アシスタントと対話できます。
+GitHub Copilot SDK / Claude Agent SDK / Codex SDK / Gemini CLI (ACP) / OpenAI 互換 API を利用した Discord AI エージェント。チャンネルやフォーラムスレッドで AI アシスタントと対話できます。
 
 ## ✨ 特徴
 
@@ -101,7 +101,7 @@ npm start
 
 ## 🤖 AI Provider
 
-Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemini CLI (ACP)**、**汎用 ACP**（環境変数だけで任意の ACP 対応 CLI を接続）の 5 つの AI Provider に対応しています。`AGENT_PROVIDER` 環境変数で切り替えます。
+Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemini CLI (ACP)**、**汎用 ACP**（環境変数だけで任意の ACP 対応 CLI を接続）、**OpenAI 互換 API** の AI Provider に対応しています。`AGENT_PROVIDER` 環境変数で切り替えます。
 
 | `AGENT_PROVIDER` | 実行方式 | 主なモデル環境変数 |
 |------------------|----------|--------------------|
@@ -110,6 +110,7 @@ Kaede は **GitHub Copilot SDK**、**Claude Agent SDK**、**Codex SDK**、**Gemi
 | `codex` | OpenAI Codex SDK (`codex`) |
 | `gemini` | Gemini CLI (`gemini`) |
 | `acp` | 任意の ACP CLI（`ACP_COMMAND` で指定） |
+| `openai` | OpenAI SDK / OpenAI 互換 Chat Completions API | `AGENT_MODEL` |
 
 ### 切り替え方法
 
@@ -155,6 +156,31 @@ ENABLE_SCHEDULE_TOOLS=0
 `/watch` スラッシュコマンドでチャンネルごとに上書きでき、`.kaede/<agent>/watch.json` に保存されます。`keyword` モードではチャンネルごとのキーワード上書きも設定できます。`mention` / `keyword` モードでも、自分への @メンションやリプライには常に反応します。`off` は通常メッセージ・メンション・リプライすべてを無視しますが、スラッシュコマンドは引き続き利用できます。
 
 ---
+
+
+### 🧠 OpenAI 互換 API（`AGENT_PROVIDER=openai`）
+
+OpenAI SDK を使って、OpenAI または OpenAI 互換の `/v1/chat/completions` API に直接接続します。Copilot SDK の BYOK 経由で相性問題が出る場合の代替 Provider として利用できます。
+
+| 環境変数 | 必須 | 説明 |
+|----------|------|------|
+| `AGENT_PROVIDER` | ✅ | `openai` を指定 |
+| `AGENT_MODEL` | ✅ | 使用するモデル識別子 |
+| `OPENAI_COMPAT_BASE_URL` / `OPENAI_BASE_URL` | 互換 API では ✅ | API ベース URL（例: `https://example.com/v1`） |
+| `OPENAI_COMPAT_API_KEY` / `OPENAI_API_KEY` | ✅ | API キー |
+| `OPENAI_COMPAT_MODELS` | - | `/model` 候補をカンマ区切りで固定したい場合 |
+| `OPENAI_COMPAT_MAX_TOOL_ROUNDS` | - | 1 回の応答で許可するツール呼び出しラウンド数（既定: `12`） |
+
+互換性確保のため、既存の Copilot BYOK 設定（`COPILOT_PROVIDER_BASE_URL` / `COPILOT_PROVIDER_API_KEY`）もフォールバックとして参照します。
+
+```sh
+AGENT_PROVIDER=openai
+AGENT_MODEL=mimo-v2.5-pro
+OPENAI_COMPAT_BASE_URL=https://example.com/v1
+OPENAI_COMPAT_API_KEY=...
+```
+
+> 現時点では Chat Completions + tool calling を使う実装です。添付画像などのマルチモーダル入力は Provider 側ではまだ直接送信していません。
 
 ### 🐙 GitHub Copilot（`AGENT_PROVIDER=copilot`）
 

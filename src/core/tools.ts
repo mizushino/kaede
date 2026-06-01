@@ -19,6 +19,7 @@ export interface ToolContext {
   messenger: Messenger;
   counter: RequestCounter;
   scheduler: Scheduler;
+  onSendMessageDelivered?: () => void;
 }
 
 export function createTools(ctx: ToolContext) {
@@ -60,6 +61,7 @@ export function createTools(ctx: ToolContext) {
 
         try {
           const messagesSent = await ctx.messenger.sendMessage(channelId, content, messageId, imagePath);
+          ctx.onSendMessageDelivered?.();
           ctx.counter.incrementSendMessage();
           ctx.messenger.stopTyping();
           return { success: true, messagesSent };

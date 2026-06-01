@@ -10,7 +10,7 @@ import { logger } from './logger.js';
 import { getConfiguredTemporaryDir } from './temporary_dir.js';
 
 export type SessionScope = 'channel' | 'server';
-export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex', 'gemini', 'acp'] as const;
+export const AGENT_PROVIDER_TYPES = ['copilot', 'claude', 'codex', 'gemini', 'acp', 'openai'] as const;
 export type AgentProviderType = typeof AGENT_PROVIDER_TYPES[number];
 
 const DEFAULT_PROVIDER: AgentProviderType = 'copilot';
@@ -20,6 +20,7 @@ const PROVIDER_SDK_PACKAGE: Record<AgentProviderType, string> = {
   codex: '@openai/codex-sdk',
   gemini: '@agentclientprotocol/sdk @google/gemini-cli',
   acp: '@agentclientprotocol/sdk',
+  openai: 'openai',
 };
 
 export interface Agent {
@@ -128,6 +129,11 @@ export abstract class Bot {
         case 'acp': {
           const mod = await import('../providers/acp_generic_agent.js');
           this.agentClass = mod.GenericAcpAgent;
+          return;
+        }
+        case 'openai': {
+          const mod = await import('../providers/openai_compatible_agent.js');
+          this.agentClass = mod.OpenAICompatibleAgent;
           return;
         }
       }

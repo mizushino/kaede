@@ -5,6 +5,7 @@ import { CopilotCodeProvider } from './copilot.js';
 import { CodexCodeProvider } from './codex.js';
 import { GeminiCodeProvider } from './gemini.js';
 import { GenericAcpProvider } from './acp_generic.js';
+import { OpenAICompatibleProvider } from './openai_compatible.js';
 
 export { BaseProvider } from './provider.js';
 export type { ProviderContext, ProviderOptions } from './provider.js';
@@ -21,6 +22,8 @@ export { killAllAcpChildren } from './acp.js';
 export { AcpAgent } from './acp_agent.js';
 export { GenericAcpProvider } from './acp_generic.js';
 export { GenericAcpAgent } from './acp_generic_agent.js';
+export { OpenAICompatibleProvider } from './openai_compatible.js';
+export { OpenAICompatibleAgent } from './openai_compatible_agent.js';
 
 export function createClaudeProvider(context: ProviderContext): BaseProvider {
   return new ClaudeCodeProvider(context);
@@ -40,4 +43,8 @@ export function createGeminiProvider(context: ProviderContext): BaseProvider {
 
 export function createAcpProvider(context: ProviderContext): BaseProvider {
   return new GenericAcpProvider(context);
+}
+
+export function createOpenAIProvider(context: ConstructorParameters<typeof OpenAICompatibleProvider>[0]): BaseProvider {
+  return new OpenAICompatibleProvider(context);
 }
