@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
-import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
+import type { ChatCompletionMessageParam, ChatCompletionTool, ChatCompletionUserMessageParam } from 'openai/resources/chat/completions';
 import { BaseProvider, asJsonObject } from './provider.js';
 import type { ContextUsageInfo, JsonObject, ProviderContext, ProviderOptions } from './provider.js';
 import type { ToolContext } from '../core/tools.js';
@@ -13,6 +13,7 @@ import { areFunctionManagementToolsEnabled, areScheduleManagementToolsEnabled } 
 
 const DEFAULT_MAX_TOOL_ROUNDS = 12;
 const DEFAULT_MODEL = 'gpt-4o-mini';
+const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 
 export interface OpenAICompatibleProviderContext extends ProviderContext {
   functionLoader: FunctionLoader;
@@ -71,8 +72,8 @@ export class OpenAICompatibleProvider extends BaseProvider {
     return null;
   }
 
-  async sendPrompt(prompt: string, _options?: ProviderOptions): Promise<void> {
-    const model = this.context.getModel() || process.env.OPENAI_MODEL || DEFAULT_MODEL;
+  async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
+    const model = options?.model || this.context.getModel() || process.env.OPENAI_MODEL || DEFAULT_MODEL;
     const toolContext = this.context.createToolContext();
     let sentDiscordMessage = false;
     const previousDelivered = toolContext.onSendMessageDelivered;
@@ -86,7 +87,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
     const toolByName = new Map(rawTools.map(tool => [tool.name, tool]));
 
     this.ensureSystemMessage();
-    this.messages.push({ role: 'user', content: prompt });
+    this.messages.push({ role: 'user', content: this.buildUserMessageContent(prompt, options?.attachments ?? []) });
 
     const maxRounds = readPositiveIntegerEnv('OPENAI_COMPAT_MAX_TOOL_ROUNDS') ?? DEFAULT_MAX_TOOL_ROUNDS;
     for (let round = 0; round < maxRounds; round++) {
@@ -192,6 +193,27 @@ IMPORTANT RULES:
 - When you need clarification or want the user to choose from options, use ask_user instead of only describing a question in plain text.${this.buildAgentsMdAppend()}`;
   }
 
+
+  private buildUserMessageContent(prompt: string, attachments: string[]): ChatCompletionUserMessageParam['content'] {
+    const imageParts = attachments.flatMap(filePath => {
+      const dataUrl = imageFileToDataUrl(filePath);
+      if (!dataUrl) return [];
+      return [{
+        type: 'image_url' as const,
+        image_url: {
+          url: dataUrl,
+          detail: readImageDetailEnv(),
+        },
+      }];
+    });
+
+    if (imageParts.length === 0) return prompt;
+    return [
+      { type: 'text' as const, text: prompt },
+      ...imageParts,
+    ] as ChatCompletionUserMessageParam['content'];
+  }
+
   private async buildTools(toolContext: ToolContext): Promise<RegisteredTool[]> {
     const fnTools = await this.context.functionLoader.loadTools(toolContext);
     return [
@@ -229,6 +251,47 @@ IMPORTANT RULES:
       return '';
     }
   }
+}
+
+
+function imageFileToDataUrl(filePath: string): string | null {
+  try {
+    const ext = path.extname(filePath).toLowerCase();
+    if (!SUPPORTED_IMAGE_EXTENSIONS.has(ext)) {
+      logger.log(`[openai] Skipping unsupported image attachment: ${filePath}`);
+      return null;
+    }
+    if (!existsSync(filePath)) {
+      logger.log(`[openai] Image attachment not found: ${filePath}`);
+      return null;
+    }
+    const mimeType = imageMimeTypeFromExtension(ext);
+    const base64 = readFileSync(filePath).toString('base64');
+    return `data:${mimeType};base64,${base64}`;
+  } catch (err) {
+    logger.log(`[openai] Failed to read image attachment: ${(err as Error).message || String(err)}`);
+    return null;
+  }
+}
+
+function imageMimeTypeFromExtension(ext: string): string {
+  switch (ext) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.png':
+    default:
+      return 'image/png';
+  }
+}
+
+function readImageDetailEnv(): 'auto' | 'low' | 'high' {
+  const detail = process.env.OPENAI_COMPAT_IMAGE_DETAIL?.trim().toLowerCase();
+  return detail === 'low' || detail === 'high' ? detail : 'auto';
 }
 
 function createOpenAIClient(): OpenAI {

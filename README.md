@@ -170,6 +170,7 @@ OpenAI SDK を使って、OpenAI または OpenAI 互換の `/v1/chat/completion
 | `OPENAI_COMPAT_API_KEY` / `OPENAI_API_KEY` | ✅ | API キー |
 | `OPENAI_COMPAT_MODELS` | - | `/model` 候補をカンマ区切りで固定したい場合 |
 | `OPENAI_COMPAT_MAX_TOOL_ROUNDS` | - | 1 回の応答で許可するツール呼び出しラウンド数（既定: `12`） |
+| `OPENAI_COMPAT_IMAGE_DETAIL` | - | 画像入力の detail（`auto` / `low` / `high`、既定: `auto`） |
 
 互換性確保のため、既存の Copilot BYOK 設定（`COPILOT_PROVIDER_BASE_URL` / `COPILOT_PROVIDER_API_KEY`）もフォールバックとして参照します。
 
@@ -180,7 +181,7 @@ OPENAI_COMPAT_BASE_URL=https://example.com/v1
 OPENAI_COMPAT_API_KEY=...
 ```
 
-> 現時点では Chat Completions + tool calling を使う実装です。添付画像などのマルチモーダル入力は Provider 側ではまだ直接送信していません。
+> Chat Completions + tool calling を使う実装です。Discord の画像添付（png / jpg / gif / webp）は Data URL として `image_url` content に変換して送信します。接続先 API / モデルが画像入力に対応していない場合は API 側でエラーになります。
 
 ### 🐙 GitHub Copilot（`AGENT_PROVIDER=copilot`）
 

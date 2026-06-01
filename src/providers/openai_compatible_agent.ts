@@ -73,9 +73,10 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 
   protected async attemptSend(items: QueuedMessage[], _attempt: number): Promise<'done' | 'retry' | 'fatal'> {
     const prompt = this.buildPrompt(items);
+    const attachments = items.flatMap(item => item.attachments ?? []);
     this.counter.startRequest(this.logTag(), items.length);
     try {
-      await this.provider.sendPrompt(prompt, { model: this.model || undefined });
+      await this.provider.sendPrompt(prompt, { model: this.model || undefined, attachments });
       return 'done';
     } catch (err) {
       const message = (err as Error).message || String(err);
