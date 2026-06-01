@@ -283,12 +283,12 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 			return 'done';
 		} catch (err) {
 			const msg = (err as Error).message || '';
-			logger.log(`[${this.model}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);
-			const action = await this.provider.handleSendError(err as Error);
 			if (sentAfterAttempt > sentBeforeAttempt) {
-				logger.log(`[${this.model}] Suppressing retry because send_message already delivered a response`);
+				logger.log(`[${this.model}] Processing complete after send_message; ignored post-tool session error: ${msg.slice(0, 120)}`);
 				return 'done';
 			}
+			logger.log(`[${this.model}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);
+			const action = await this.provider.handleSendError(err as Error);
 			if (action === 'stop') return 'fatal';
 			if (this.shouldRetry(action, attempt)) return 'retry';
 			if (action === 'connection') {

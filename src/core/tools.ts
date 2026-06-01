@@ -1,4 +1,5 @@
 import { defineTool } from '@github/copilot-sdk';
+import type { ToolResultObject } from '@github/copilot-sdk';
 import { z } from 'zod';
 import type { QueuedMessage } from './messages.js';
 import type { Messenger } from './messenger.js';
@@ -21,6 +22,21 @@ export interface ToolContext {
   scheduler: Scheduler;
 }
 
+function toolSuccess(value: unknown): ToolResultObject {
+  return {
+    textResultForLlm: typeof value === 'string' ? value : JSON.stringify(value),
+    resultType: 'success',
+  };
+}
+
+function toolFailure(message: string): ToolResultObject {
+  return {
+    textResultForLlm: message,
+    resultType: 'failure',
+    error: message,
+  };
+}
+
 export function createTools(ctx: ToolContext) {
   const tools = [
     defineTool('send_message', {
@@ -36,7 +52,7 @@ export function createTools(ctx: ToolContext) {
         if (hasInternalSummary(content)) {
           logger.log(`[${ctx.model}] Blocked send_message because content matched internal summary markers`);
           ctx.messenger.stopTyping();
-          return { success: true, messagesSent: 1 };
+          return toolSuccess({ success: true, messagesSent: 1 });
         }
 
         if (ctx.queue.length > 0) {
@@ -55,16 +71,16 @@ export function createTools(ctx: ToolContext) {
 
           logger.log(`[${ctx.model}] Deferred send_message because ${ctx.queue.length - 1} newer message(s) were queued`);
           ctx.messenger.stopTyping();
-          return { queued: true, reason: 'new_messages_waiting', pendingMessages: ctx.queue.length - 1 };
+          return toolSuccess({ queued: true, reason: 'new_messages_waiting', pendingMessages: ctx.queue.length - 1 });
         }
 
         try {
           const messagesSent = await ctx.messenger.sendMessage(channelId, content, messageId, imagePath);
           ctx.counter.incrementSendMessage();
           ctx.messenger.stopTyping();
-          return { success: true, messagesSent };
+          return toolSuccess({ success: true, messagesSent });
         } catch (err: unknown) {
-          return { error: (err as Error).message };
+          return toolFailure((err as Error).message);
         }
       },
     }),
@@ -78,9 +94,9 @@ export function createTools(ctx: ToolContext) {
       skipPermission: true,
       handler: async ({ channelId, limit }) => {
         try {
-          return await ctx.messenger.getMessages(channelId, limit);
+          return toolSuccess(await ctx.messenger.getMessages(channelId, limit));
         } catch (err: unknown) {
-          return { error: (err as Error).message };
+          return toolFailure((err as Error).message);
         }
       },
     }),
@@ -93,9 +109,9 @@ export function createTools(ctx: ToolContext) {
       skipPermission: true,
       handler: async ({ serverId }) => {
         try {
-          return await ctx.messenger.getChannels(serverId);
+          return toolSuccess(await ctx.messenger.getChannels(serverId));
         } catch (err: unknown) {
-          return { error: (err as Error).message };
+          return toolFailure((err as Error).message);
         }
       },
     }),
@@ -118,9 +134,9 @@ export function createTools(ctx: ToolContext) {
         handler: async ({ cron, channelId, prompt, description, guildId }) => {
           try {
             const entry = ctx.scheduler.add({ cron, channelId, prompt, description, guildId });
-            return { success: true, schedule: entry };
+            return toolSuccess({ success: true, schedule: entry });
           } catch (err: unknown) {
-            return { error: (err as Error).message };
+            return toolFailure((err as Error).message);
           }
         },
       }),
@@ -129,7 +145,7 @@ export function createTools(ctx: ToolContext) {
         parameters: z.object({}),
         skipPermission: true,
         handler: async () => {
-          return { schedules: ctx.scheduler.list() };
+          return toolSuccess({ schedules: ctx.scheduler.list() });
         },
       }),
       defineTool('remove_schedule', {
@@ -140,7 +156,7 @@ export function createTools(ctx: ToolContext) {
         skipPermission: true,
         handler: async ({ id }) => {
           const removed = ctx.scheduler.remove(id);
-          return removed ? { success: true } : { error: `Schedule "${id}" not found` };
+          return removed ? toolSuccess({ success: true }) : toolFailure(`Schedule "${id}" not found`);
         },
       }),
     ];
