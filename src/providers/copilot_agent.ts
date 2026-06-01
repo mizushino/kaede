@@ -284,7 +284,7 @@ messageId: (Optional - use the ID of the message you want to reply to from the J
 		} catch (err) {
 			const msg = (err as Error).message || '';
 			if (sentAfterAttempt > sentBeforeAttempt) {
-				logger.log(`[${this.model}] Processing complete after send_message; ignored post-tool session error: ${msg.slice(0, 120)}`);
+				logger.log(`[${this.model}] Processing complete`);
 				return 'done';
 			}
 			logger.log(`[${this.model}] Attempt ${attempt}/${this.maxRetries} failed: ${msg.slice(0, 120)}`);

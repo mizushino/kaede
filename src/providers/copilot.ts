@@ -1,5 +1,5 @@
 import { CopilotSession } from '@github/copilot-sdk';
-import type { ElicitationContext, ElicitationResult, ResumeSessionConfig, Tool } from '@github/copilot-sdk';
+import type { ElicitationContext, ElicitationResult, MessageOptions, ResumeSessionConfig, SessionEvent, Tool } from '@github/copilot-sdk';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import type { CopilotClientManager } from '../core/client.js';
@@ -36,6 +36,8 @@ export class CopilotCodeProvider extends BaseProvider {
 	readonly name = 'copilot';
 
 	private currentSession: CopilotSession | null = null;
+	private readonly sendMessageToolCalls = new Set<string>();
+	private lastSendMessageCompletedAt = 0;
 	private lastUsageInfo: {
 		currentTokens: number;
 		tokenLimit: number;
@@ -83,10 +85,72 @@ export class CopilotCodeProvider extends BaseProvider {
 
 		const imageAttachments = (options?.attachments ?? []).map(filePath => ({ type: 'file' as const, path: filePath }));
 
-		await session.sendAndWait({
+		await this.sendAndWaitForDiscordReply(session, {
 			prompt,
 			...(imageAttachments.length > 0 ? { attachments: imageAttachments } : {}),
 		});
+	}
+
+	private async sendAndWaitForDiscordReply(session: CopilotSession, options: MessageOptions, timeoutMs = 60_000): Promise<void> {
+		let timeoutId: ReturnType<typeof setTimeout> | undefined;
+		let unsubscribe: (() => void) | undefined;
+
+		const waitForCompletion = new Promise<void>((resolve, reject) => {
+			const finish = (fn: () => void) => {
+				if (timeoutId) clearTimeout(timeoutId);
+				unsubscribe?.();
+				fn();
+			};
+
+			timeoutId = setTimeout(() => {
+				finish(() => reject(new Error(`Timeout after ${timeoutMs}ms waiting for session.idle`)));
+			}, timeoutMs);
+
+			unsubscribe = session.on((event: SessionEvent) => {
+				if (event.type === 'tool.execution_start') {
+					const data = event.data;
+					if (data.toolName === 'send_message') {
+						this.sendMessageToolCalls.add(data.toolCallId);
+					}
+					return;
+				}
+
+				if (event.type === 'tool.execution_complete') {
+					const data = event.data;
+					if (this.sendMessageToolCalls.delete(data.toolCallId)) {
+						this.lastSendMessageCompletedAt = Date.now();
+						finish(resolve);
+					}
+					return;
+				}
+
+				if (event.type === 'session.idle') {
+					finish(resolve);
+					return;
+				}
+
+				if (event.type === 'session.error') {
+					if (this.isPostSendMessageQueryError(event.data?.message)) {
+						finish(resolve);
+						return;
+					}
+					const error = new Error(event.data.message);
+					error.stack = event.data.stack;
+					finish(() => reject(error));
+				}
+			});
+		});
+
+		try {
+			await session.send(options);
+			await waitForCompletion;
+		} catch (error) {
+			if (this.isPostSendMessageQueryError((error as Error).message)) return;
+			throw error;
+		} finally {
+			if (timeoutId) clearTimeout(timeoutId);
+			unsubscribe?.();
+		}
 	}
 
 	async handleSendError(error: Error): Promise<CopilotSendErrorAction> {
@@ -116,6 +180,12 @@ export class CopilotCodeProvider extends BaseProvider {
 		}
 
 		return 'fail';
+	}
+
+	private isPostSendMessageQueryError(message?: string): boolean {
+		if (!message) return false;
+		if (Date.now() - this.lastSendMessageCompletedAt > 10_000) return false;
+		return message.includes("Cannot read properties of null") || message.includes("Cannot read properties of undefined");
 	}
 
 	dispose(): void {
