@@ -81,7 +81,6 @@ export class CopilotCodeProvider extends BaseProvider {
 	async sendPrompt(prompt: string, options?: ProviderOptions): Promise<void> {
 		const { config, fnTools } = await this.buildSessionConfig();
 		const session = await this.ensureSession(config, fnTools.length);
-		session.registerTools(config.tools as unknown as Tool[]);
 
 		const imageAttachments = (options?.attachments ?? []).map(filePath => ({ type: 'file' as const, path: filePath }));
 

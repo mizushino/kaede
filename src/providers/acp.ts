@@ -602,7 +602,7 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
             mcpServers,
           });
           this.sessionId = persisted.sessionId;
-          this.currentModelId = persisted.currentModel || response.models?.currentModelId || '';
+          this.currentModelId = persisted.currentModel || this.findModelId(response) || '';
           this.applySessionMetadata(response);
           logger.log(`[${this.name}] Loaded ACP session ${this.sessionId}`);
         } catch (err) {
@@ -618,7 +618,7 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
           mcpServers,
         });
         this.sessionId = response.sessionId;
-        this.currentModelId = response.models?.currentModelId || '';
+        this.currentModelId = this.findModelId(response) || '';
         this.applySessionMetadata(response);
         await this.persistSessionState();
         logger.log(`[${this.name}] Created ACP session ${this.sessionId}`);
@@ -628,10 +628,18 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
     await this.applySessionOptions(connection, options);
   }
 
-  protected applySessionMetadata(response: SessionOpenResponse): void {
+    private findModelId(response: SessionOpenResponse): string | undefined {
+    const modelOption = response.configOptions?.find(
+      (opt): opt is acp.SessionConfigOption & { type: 'select' } =>
+        opt.id === 'model' && opt.type === 'select'
+    );
+    return (modelOption as any)?.currentValue;
+  }
+
+protected applySessionMetadata(response: SessionOpenResponse): void {
     this.currentModeId = response.modes?.currentModeId || this.currentModeId;
-    if (response.models?.currentModelId) {
-      this.currentModelId = response.models.currentModelId;
+    if (this.findModelId(response)) {
+      this.currentModelId = this.findModelId(response)!;
     }
   }
 
@@ -652,9 +660,10 @@ export abstract class AcpProvider extends BaseProvider implements acp.Client {
 
     const targetModel = options?.model?.trim();
     if (targetModel && targetModel !== this.currentModelId) {
-      await connection.unstable_setSessionModel({
+      await connection.setSessionConfigOption({
         sessionId: this.sessionId,
-        modelId: targetModel,
+        configId: 'model',
+        value: targetModel,
       });
       this.currentModelId = targetModel;
       await this.persistSessionState();
@@ -839,12 +848,16 @@ export async function listAcpModels(
       mcpServers: [],
     });
 
-    const models: Array<{ modelId: string; name: string; description?: string | null }> =
-      response.models?.availableModels ?? [];
+    const modelOption = response.configOptions?.find(
+      (opt) => opt.id === 'model' && opt.type === 'select'
+    ) as acp.SessionConfigOption & { type: 'select' } | undefined;
+
+    const models = (modelOption?.options || []).flatMap(opt => 
+      'value' in opt ? [opt] : ((opt as any).options || [])
+    );
 
     return models.map(model => ({
-      id: model.modelId,
-      displayName: model.name,
+      id: model.value, displayName: model.name,
       description: model.description ?? '',
     }));
   } catch (err) {
