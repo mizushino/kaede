@@ -233,12 +233,27 @@ export class CopilotCodeProvider extends BaseProvider {
 		const provider = this.buildProviderConfig();
 		const reasoningEffort = this.context.getReasoningEffort();
 		const maxContextWindowTokens = readPositiveIntegerEnv('COPILOT_MAX_CONTEXT_WINDOW_TOKENS');
+		const maxPromptTokens = readPositiveIntegerEnv('COPILOT_MAX_PROMPT_TOKENS');
 		const bgCompactionThreshold = readThresholdEnv('COPILOT_BACKGROUND_COMPACTION_THRESHOLD');
 		const bufferExhaustionThreshold = readThresholdEnv('COPILOT_BUFFER_EXHAUSTION_THRESHOLD');
 
-		const modelCapabilities = maxContextWindowTokens
-			? { limits: { max_context_window_tokens: maxContextWindowTokens } }
-			: undefined;
+		if (maxContextWindowTokens !== undefined && maxPromptTokens !== undefined && maxPromptTokens > maxContextWindowTokens) {
+			throw new Error(
+				`COPILOT_MAX_PROMPT_TOKENS (${maxPromptTokens}) must not exceed ` +
+					`COPILOT_MAX_CONTEXT_WINDOW_TOKENS (${maxContextWindowTokens})`,
+			);
+		}
+
+		const modelLimits =
+			maxContextWindowTokens !== undefined || maxPromptTokens !== undefined
+				? {
+						...(maxContextWindowTokens !== undefined
+							? { max_context_window_tokens: maxContextWindowTokens }
+							: {}),
+						...(maxPromptTokens !== undefined ? { max_prompt_tokens: maxPromptTokens } : {}),
+					}
+				: undefined;
+		const modelCapabilities = modelLimits ? { limits: modelLimits } : undefined;
 
 		const infiniteSessions =
 			bgCompactionThreshold !== undefined || bufferExhaustionThreshold !== undefined
