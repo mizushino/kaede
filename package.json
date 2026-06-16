@@ -16,11 +16,11 @@
   },
   "optionalDependencies": {
     "@agentclientprotocol/sdk": "^0.25.1",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.177",
-    "@anthropic-ai/claude-code": "^2.1.177",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.178",
+    "@anthropic-ai/claude-code": "^2.1.178",
     "@github/copilot-sdk": "^1.0.1",
     "@google/gemini-cli": "^0.46.0",
-    "@openai/codex-sdk": "^0.139.0"
+    "@openai/codex-sdk": "^0.140.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
