@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import fs from 'fs';
 import { logger } from './logger.js';
 
