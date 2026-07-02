@@ -449,9 +449,10 @@ export class ClaudeCodeProvider extends BaseProvider {
       this.setDetectedStatus(message.text);
       logger.log(`[${this.name}] notification: ${message.text}`);
     } else if (message.subtype === 'init') {
-      const failedServers = message.mcp_servers.filter(server => server.status === 'failed');
+      const servers = (message as Extract<SDKMessage, { type: 'system'; subtype: 'init' }>).mcp_servers;
+      const failedServers = servers.filter((s: { name: string; status: string }) => s.status === 'failed');
       if (failedServers.length > 0) {
-        logger.log(`[${this.name}] MCP connection issues: ${failedServers.map(server => `${server.name}:${server.status}`).join(', ')}`);
+        logger.log(`[${this.name}] MCP connection issues: ${failedServers.map((s: { name: string; status: string }) => `${s.name}:${s.status}`).join(', ')}`);
       }
     }
   }
