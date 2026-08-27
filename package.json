@@ -20,7 +20,7 @@
     "@anthropic-ai/claude-code": "^2.1.246",
     "@github/copilot-sdk": "^1.0.11",
     "@google/gemini-cli": "^0.57.0",
-    "@openai/codex-sdk": "^0.149.1"
+    "@openai/codex-sdk": "^0.150.0"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",
