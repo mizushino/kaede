@@ -189,7 +189,8 @@ GitHub Copilot の代わりに、任意のモデルプロバイダー（OpenAI, 
 | `COPILOT_PROVIDER_BASE_URL` | ✅ | モデルプロバイダーの API エンドポイント |
 | `COPILOT_PROVIDER_TYPE` | - | プロバイダーの種類: `openai`（デフォルト）, `azure`, `anthropic` |
 | `COPILOT_PROVIDER_API_KEY` | - | プロバイダーの API キー（Ollama などローカルプロバイダーには不要） |
-| `COPILOT_MAX_CONTEXT_WINDOW_TOKENS` | - | オープンモデルなどでコンテキスト長を明示したい場合の上書き値 |
+| `COPILOT_MAX_CONTEXT_WINDOW_TOKENS` | - | 入力と出力を合わせたコンテキスト長の上書き値 |
+| `COPILOT_MAX_PROMPT_TOKENS` | - | 入力（プロンプト）トークン上限の上書き値 |
 | `COPILOT_BACKGROUND_COMPACTION_THRESHOLD` | - | バックグラウンド compaction を開始する使用率（0〜1） |
 | `COPILOT_BUFFER_EXHAUSTION_THRESHOLD` | - | compaction 完了待ちに入る使用率（0〜1） |
 
@@ -214,9 +215,12 @@ AGENT_MODEL=llama3
 ```sh
 AGENT_MODEL=Qwen3.6-27B
 COPILOT_MAX_CONTEXT_WINDOW_TOKENS=262144
+COPILOT_MAX_PROMPT_TOKENS=245760
 ```
 
-未指定の場合は、SDK / ランタイム側の既定値を使用します。
+`COPILOT_MAX_PROMPT_TOKENS` は `COPILOT_MAX_CONTEXT_WINDOW_TOKENS` 以下に設定してください。入力上限には、モデルの最大出力分の余白を残すことを推奨します。両方を設定した状態で入力上限がコンテキスト長を超えている場合は、設定エラーとしてセッション作成を中止します。
+
+各項目が未指定の場合は、その項目について SDK / ランタイム側の既定値を使用します。Copilot SDK は履歴圧縮の上限として入力トークン上限を優先するため、コンテキスト長を拡張して実際に利用したい場合は入力トークン上限も明示してください。
 
 > **Note:** BYOK 使用時は `GITHUB_TOKEN` を設定しなくても動作します。`GITHUB_TOKEN` を設定した場合は GitHub 認証が優先されます。
 
