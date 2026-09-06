@@ -8,7 +8,7 @@ import { createTools, type ToolContext } from '../core/tools.js';
 import { createPermissionHandler, type PermissionConfig } from '../core/permissions.js';
 import { logger } from '../core/logger.js';
 import { areFunctionManagementToolsEnabled, areScheduleManagementToolsEnabled } from '../core/tool_features.js';
-import { BaseProvider } from './provider.js';
+import { asJsonObject, BaseProvider } from './provider.js';
 import type { ContextUsageInfo, ProviderContext, ProviderOptions, ReasoningEffort as BaseReasoningEffort } from './provider.js';
 
 export type ReasoningEffort = BaseReasoningEffort;
@@ -345,7 +345,7 @@ IMPORTANT RULES:
 	private setupEventHandlers(session: CopilotSession): void {
 		session.on('tool.execution_start', (event) => {
 			const toolName = event?.data?.toolName || '';
-			const args = event?.data?.arguments || {};
+			const args = asJsonObject(event?.data?.arguments) ?? {};
 			const detail = this.formatToolDetail(toolName, args);
 			logger.log(`[${this.context.getModel()}] tool: ${toolName}${detail ? ` | ${detail}` : ''}`);
 			if (toolName !== 'send_message') {
